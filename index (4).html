@@ -1,0 +1,2170 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>NTC Wallet - Notoriety Coin Portal & Cyber Dashboard</title>
+  
+  <!-- Tailwind CSS para design cyberpunk moderno -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  
+  <!-- CDNs via Cloudflare (cdnjs) - Ultra estáveis e de alta performance -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/lucide/0.321.0/umd/lucide.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/react/17.0.2/umd/react.production.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/react-dom/17.0.2/umd/react-dom.production.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/babel-standalone/7.24.0/babel.min.js"></script>
+  
+  <!-- Dexie.js - Wrapper elegante e potente para IndexedDB (Nosso "SQLite" no navegador) -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/dexie/3.2.4/dexie.min.js"></script>
+  
+  <style>
+    @import url('https://fonts.googleapis.com/css2?family=Orbitron:wght@400;600;800;900&family=Rajdhani:wght@500;600;700&display=swap');
+    
+    body {
+      font-family: 'Rajdhani', sans-serif;
+      background-color: #040408;
+      background-image: 
+        radial-gradient(circle at 10% 20%, rgba(16, 10, 30, 0.7) 0%, transparent 40%),
+        radial-gradient(circle at 90% 80%, rgba(20, 5, 25, 0.6) 0%, transparent 45%);
+      background-attachment: fixed;
+    }
+
+    .font-orbitron {
+      font-family: 'Orbitron', sans-serif;
+    }
+
+    /* Animações cyberpunk de alta fidelidade */
+    @keyframes spin-slow {
+      from { transform: rotate(0deg); }
+      to { transform: rotate(360deg); }
+    }
+    .animate-spin-slow {
+      animation: spin-slow 16s linear infinite;
+    }
+
+    @keyframes pulse-cyan {
+      0%, 100% { opacity: 0.2; transform: scale(1); }
+      50% { opacity: 0.5; transform: scale(1.05); }
+    }
+    .glow-overlay {
+      position: absolute;
+      inset: 0;
+      background: radial-gradient(circle, rgba(147, 51, 234, 0.1) 0%, transparent 70%);
+      pointer-events: none;
+      animation: pulse-cyan 6s ease-in-out infinite;
+    }
+
+    /* Scrollbar estilizada */
+    ::-webkit-scrollbar {
+      width: 6px;
+      height: 6px;
+    }
+    ::-webkit-scrollbar-track {
+      background: #020205;
+    }
+    ::-webkit-scrollbar-thumb {
+      background: #1f1235;
+      border-radius: 4px;
+      border: 1px solid #3b0764;
+    }
+    ::-webkit-scrollbar-thumb:hover {
+      background: #db2777;
+    }
+
+    /* Efeitos de scanlines e retro-futurismo */
+    .scanlines {
+      position: relative;
+      overflow: hidden;
+    }
+    .scanlines::before {
+      content: " ";
+      display: block;
+      position: absolute;
+      top: 0; left: 0; bottom: 0; right: 0;
+      background: linear-gradient(rgba(18, 16, 16, 0) 50%, rgba(0, 0, 0, 0.25) 50%), linear-gradient(90deg, rgba(255, 0, 0, 0.06), rgba(0, 255, 0, 0.02), rgba(0, 0, 255, 0.06));
+      z-index: 2;
+      background-size: 100% 3px, 3px 100%;
+      pointer-events: none;
+    }
+  </style>
+
+  <script>
+    // Inicialização da IndexedDB via Dexie
+    const db = new Dexie("NtcWalletDB");
+    
+    // Definimos o schema do banco de dados (Tabelas e índices)
+    db.version(1).stores({
+      users: "username, address, seed, balance", // Chave primária: username
+      transactions: "++id, username, toAddress, fromUser, amount, date, claimed",
+      notes: "++id, username, text, color",
+      reviews: "++id, author, title, host, vibe, timestamp",
+      config: "key, value"
+    });
+
+    // Erros críticos globais
+    window.addEventListener('error', function(event) {
+      const root = document.getElementById('root');
+      if (root && (!root.children || root.children.length === 0)) {
+        root.innerHTML = `
+          <div class="min-h-screen flex items-center justify-center p-6 bg-[#040408] text-white">
+            <div class="max-w-md w-full bg-[#080810] border border-red-500/50 rounded-2xl p-6 shadow-xl">
+              <h3 class="text-xl font-bold text-red-400 font-orbitron mb-2">Falha crítica de sistema</h3>
+              <pre class="bg-black/50 p-4 rounded-xl border border-red-950 overflow-x-auto text-xs text-red-300 mb-4 whitespace-pre-wrap">${event.message || 'Erro de script externo ou inicialização.'}</pre>
+              <button onclick="window.location.reload()" class="w-full py-2 bg-red-600 hover:bg-red-500 rounded-xl transition">Reiniciar Terminal</button>
+            </div>
+          </div>
+        `;
+      }
+    });
+  </script>
+</head>
+<body class="text-gray-100 min-h-screen flex flex-col justify-between scanlines">
+
+  <!-- Div de montagem do React -->
+  <div id="root" class="flex-grow flex flex-col"></div>
+
+  <!-- Script da aplicação React -->
+  <script type="text/babel" data-presets="env,react">
+    const { useState, useEffect, useRef } = React;
+
+    const MNEMONIC_WORDS = [
+      "matrix", "net", "cyber", "token", "neon", "flow", "delta", "fusion", 
+      "protocol", "node", "quantum", "sync", "hash", "link", "grid", "shield", 
+      "code", "engine", "plasma", "vortex", "acelera", "notoriety", "glow", "wallet",
+      "arcade", "pixel", "beacon", "citadel", "glitch", "mainframe", "proxy", "daemon"
+    ];
+
+    // ⚠️ Usuários autorizados para fazer PULL (sincronização de leitura)
+    // Apenas estes usernames podem sincronizar dados do GitHub
+    const AUTHORIZED_ADMINS = [
+      "aceleradox",      // Admin principal
+      "admin",           // Admin genérico
+      "root"             // Super admin
+      // Adicione mais usernames conforme necessário
+    ];
+
+    const SHOP_ITEMS = {
+      neonThemes: { price: 5.0, label: "Temas Neon Customizados", desc: "Altera a cor do glow e do sotaque visual do dashboard." },
+      youtubePlayer: { price: 8.0, label: "Soundtrack Player", desc: "Habilita o reprodutor de vídeos e playlists do YouTube." },
+      fusionEngine: { price: 12.0, label: "Reator de Fusão Térmica", desc: "Habilita o motor de mineração pesada para farmar NTC." },
+      customAvatar: { price: 3.0, label: "Identidade Holográfica", desc: "Libera a edição de fotos via link de avatar no perfil." }
+    };
+
+    const generateNewSeed = () => {
+      let words = [];
+      for (let i = 0; i < 12; i++) {
+        const randomIndex = Math.floor(Math.random() * MNEMONIC_WORDS.length);
+        words.push(MNEMONIC_WORDS[randomIndex]);
+      }
+      return words.join(' ');
+    };
+
+    const generateAddressFromSeed = (seed) => {
+      const cleanSeed = seed.trim().toLowerCase();
+      let hash = 0;
+      for (let i = 0; i < cleanSeed.length; i++) {
+        hash = cleanSeed.charCodeAt(i) + ((hash << 5) - hash);
+      }
+      let hex = '';
+      let value = Math.abs(hash);
+      for (let i = 0; i < 40; i++) {
+        value = (value * 11) ^ cleanSeed.charCodeAt(i % cleanSeed.length);
+        hex += Math.abs(value % 16).toString(16);
+      }
+      return 'NTC0x' + hex.substring(0, 40).toUpperCase();
+    };
+
+    function App() {
+      // --- CONTROLES DE ESTADO GERAL ---
+      const [currentUser, setCurrentUser] = useState(null); 
+      const [registeredUsers, setRegisteredUsers] = useState([]); 
+      const [activeTab, setActiveTab] = useState('auth'); 
+      const [toast, setToast] = useState(null);
+      const [showWalletAddress, setShowWalletAddress] = useState(false);
+
+      // --- CONFIGURAÇÃO DO GITHUB (LEDGER GLOBAL) ---
+      // ⚠️ SEGURO: Token agora é gerenciado por Netlify Functions (variáveis de ambiente)
+      // Não exponha credenciais no frontend!
+      const [githubSyncStatus, setGithubSyncStatus] = useState('offline'); // 'offline' | 'loading' | 'synced' | 'unauthorized'
+
+      // --- LOGIN / CADASTRO ---
+      const [authMode, setAuthMode] = useState('login'); 
+      const [usernameInput, setUsernameInput] = useState('');
+      const [seedInput, setSeedInput] = useState('');
+      const [generatedSeed, setGeneratedSeed] = useState('');
+      const [authError, setAuthError] = useState('');
+
+      // --- BALANÇO E TRANSAÇÕES ---
+      const [balance, setBalance] = useState(10.00);
+      const [history, setHistory] = useState([]);
+      const [sendTargetAddress, setSendTargetAddress] = useState('');
+      const [sendAmount, setSendAmount] = useState('');
+      const [targetUserFound, setTargetUserFound] = useState(null);
+      const [isValidatingAddress, setIsValidatingAddress] = useState(false);
+
+      // --- FARM / ROLETAS / ENGINES ---
+      const [isSpinning, setIsSpinning] = useState(false);
+      const [spinCooldown, setSpinCooldown] = useState(0);
+      const [spinResult, setSpinResult] = useState(null);
+      const spinRotation = useRef(0);
+
+      const [engines, setEngines] = useState({
+        solar: { active: false, timeLeft: 0, duration: 60, reward: 0.5, label: "Coletor Solar" },
+        quantum: { active: false, timeLeft: 0, duration: 300, reward: 3.5, label: "Motor Quântico" },
+        fusion: { active: false, timeLeft: 0, duration: 900, reward: 12.0, label: "Reator de Fusão" }
+      });
+
+      // --- CUSTOMIZAÇÃO E COMPRAS ---
+      const [unlockedFeatures, setUnlockedFeatures] = useState({
+        neonThemes: false,
+        youtubePlayer: false,
+        fusionEngine: false,
+        customAvatar: false
+      });
+      const [activeNeon, setActiveNeon] = useState('purple');
+      const [profileBio, setProfileBio] = useState('Nômade da rede de dados e explorador de Notoriety Coin.');
+      const [profileAvatar, setProfileAvatar] = useState('https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe?w=150&auto=format&fit=crop&q=80');
+      const [notesList, setNotesList] = useState([]);
+      const [newNoteText, setNewNoteText] = useState('');
+
+      // --- MURAL DE COMENTÁRIOS ---
+      const [reviewsList, setReviewsList] = useState([]);
+      const [newReview, setNewReview] = useState({ title: '', host: '', vibe: 5, reviewText: '', consented: false });
+
+      // --- EMBED WIDGET ---
+      const [embedType, setEmbedType] = useState('send');
+      const [embedWallet, setEmbedWallet] = useState('');
+      const [embedAmount, setEmbedAmount] = useState('1.00');
+
+      // Paletas Cyber Neon
+      const neonClasses = {
+        purple: { border: 'border-purple-500/50', glow: 'shadow-[0_0_15px_rgba(167,139,250,0.45)]', text: 'text-purple-400', bg: 'bg-purple-600', shadow: 'rgba(167, 139, 250, 0.25)', bgTo: 'from-purple-950/80 to-slate-950/90', hoverBg: 'hover:bg-purple-500', fill: '#c084fc' },
+        pink: { border: 'border-pink-500/50', glow: 'shadow-[0_0_15px_rgba(236,72,153,0.45)]', text: 'text-pink-400', bg: 'bg-pink-600', shadow: 'rgba(236, 72, 153, 0.25)', bgTo: 'from-pink-950/80 to-slate-950/90', hoverBg: 'hover:bg-pink-500', fill: '#f472b6' },
+        cyan: { border: 'border-cyan-500/50', glow: 'shadow-[0_0_15px_rgba(6,182,212,0.45)]', text: 'text-cyan-400', bg: 'bg-cyan-600', shadow: 'rgba(6, 182, 212, 0.25)', bgTo: 'from-cyan-950/80 to-slate-950/90', hoverBg: 'hover:bg-cyan-500', fill: '#22d3ee' },
+        green: { border: 'border-emerald-500/50', glow: 'shadow-[0_0_15px_rgba(16,185,129,0.45)]', text: 'text-emerald-400', bg: 'bg-emerald-600', shadow: 'rgba(16, 185, 129, 0.25)', bgTo: 'from-emerald-950/80 to-slate-950/90', hoverBg: 'hover:bg-emerald-500', fill: '#34d399' },
+        gold: { border: 'border-amber-500/50', glow: 'shadow-[0_0_15px_rgba(245,158,11,0.45)]', text: 'text-amber-400', bg: 'bg-amber-600', shadow: 'rgba(245, 158, 11, 0.25)', bgTo: 'from-amber-950/80 to-slate-950/90', hoverBg: 'hover:bg-amber-500', fill: '#fbbf24' }
+      };
+
+      const currentNeon = neonClasses[activeNeon] || neonClasses.purple;
+
+      // Executa o Lucide com proteção
+      const triggerLucide = () => {
+        if (typeof window.lucide !== 'undefined' && window.lucide && typeof window.lucide.createIcons === 'function') {
+          try {
+            window.lucide.createIcons();
+          } catch (e) {
+            console.warn("Lucide falhou:", e);
+          }
+        }
+      };
+
+      // --- INICIALIZAÇÃO DO ECOSSISTEMA ---
+      useEffect(() => {
+        const bootstrap = async () => {
+          await loadAllReviews();
+          await loadRegisteredUsers();
+          // Tenta sincronizar primeiro do JSON do repositório público (Leitura automática, sem autenticação)
+          await pullFromGitHubPublic();
+          setTimeout(triggerLucide, 150);
+        };
+        bootstrap();
+      }, []);
+
+      useEffect(() => {
+        setTimeout(triggerLucide, 150);
+      }, [activeTab, currentUser, isSpinning, engines, githubSyncStatus]);
+
+      const loadRegisteredUsers = async () => {
+        try {
+          const list = await db.users.toArray();
+          setRegisteredUsers(list);
+        } catch (err) {
+          console.error(err);
+        }
+      };
+
+      const loadAllReviews = async () => {
+        try {
+          const list = await db.reviews.reverse().toArray();
+          setReviewsList(list);
+        } catch (err) {
+          console.error(err);
+        }
+      };
+
+      const loadUserData = async (username) => {
+        try {
+          const userObj = await db.users.get(username);
+          if (userObj) {
+            setCurrentUser(userObj);
+            setBalance(userObj.balance || 0.00);
+            setUnlockedFeatures(userObj.unlockedFeatures || {
+              neonThemes: false,
+              youtubePlayer: false,
+              fusionEngine: false,
+              customAvatar: false
+            });
+            setActiveNeon(userObj.activeNeon || 'purple');
+            setProfileBio(userObj.profileBio || 'Explorador da rede NTC.');
+            setProfileAvatar(userObj.profileAvatar || 'https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe?w=150&auto=format&fit=crop&q=80');
+            
+            const userNotes = await db.notes.where("username").equals(username).toArray();
+            setNotesList(userNotes);
+
+            const userTx = await db.transactions
+              .where("username")
+              .equals(username)
+              .or("toAddress")
+              .equals(userObj.address)
+              .reverse()
+              .toArray();
+            setHistory(userTx);
+
+            setToast({ message: `Sessão @${username} carregada com sucesso!`, type: "success" });
+            setActiveTab('dashboard');
+          }
+        } catch (err) {
+          console.error(err);
+        }
+      };
+
+      useEffect(() => {
+        const savedSession = localStorage.getItem('ntc_logged_user');
+        if (savedSession) {
+          loadUserData(savedSession);
+        }
+      }, []);
+
+      // --- PROTOCOLO DE CONEXÃO COM O GITHUB (LEITURA E ESCRITA DO LEDGER) ---
+
+      // 0. PULL PÚBLICO (Sincronização automática na inicialização - sem exigir autorização)
+      const pullFromGitHubPublic = async () => {
+        try {
+          const url = `./database.json?nocache=${Date.now()}`;
+          const res = await fetch(url);
+          
+          if (!res.ok) {
+            return; // Silenciosamente ignora se arquivo não existe
+          }
+
+          const globalData = await res.json();
+          
+          // Sincroniza usuários
+          if (globalData.users && globalData.users.length) {
+            for (let u of globalData.users) {
+              const localU = await db.users.get(u.username);
+              if (!localU || localU.balance !== u.balance) {
+                await db.users.put(u);
+              }
+            }
+          }
+
+          // Sincroniza transações
+          if (globalData.transactions && globalData.transactions.length) {
+            for (let tx of globalData.transactions) {
+              const localTx = await db.transactions.get(tx.id);
+              if (!localTx) {
+                await db.transactions.put(tx);
+              }
+            }
+          }
+
+          // Sincroniza relatos do feed
+          if (globalData.reviews && globalData.reviews.length) {
+            for (let rev of globalData.reviews) {
+              const localRev = await db.reviews.get(rev.id);
+              if (!localRev) {
+                await db.reviews.put(rev);
+              }
+            }
+          }
+
+          await loadRegisteredUsers();
+          await loadAllReviews();
+        } catch (err) {
+          // Silenciosamente ignora erros (arquivo pode não existir ainda)
+          console.log("Sincronização automática silenciosa:", err.message);
+        }
+      };
+      // ⚠️ AUTORIZAÇÃO: Apenas admins podem sincronizar!
+      const pullFromGitHub = async () => {
+        // Verifica se usuário está logado e é autorizado
+        if (!currentUser) {
+          showToast("Você precisa estar logado para sincronizar dados.", "error");
+          return;
+        }
+
+        if (!AUTHORIZED_ADMINS.includes(currentUser.username)) {
+          showToast(`⛔ Acesso negado. Apenas administradores podem sincronizar. Seu username: @${currentUser.username}`, "error");
+          return;
+        }
+
+        setGithubSyncStatus('loading');
+        try {
+          // Buscamos o database.json do próprio repositório no GitHub Pages de forma pública (sem autenticação)
+          // Usamos nocache para evitar o cache agressivo do GitHub Pages
+          const url = `./database.json?nocache=${Date.now()}`;
+          const res = await fetch(url);
+          
+          if (!res.ok) {
+            // Se der 404, o arquivo ainda não foi gerado ou comitado no repositório
+            setGithubSyncStatus('offline');
+            return;
+          }
+
+          const globalData = await res.json();
+          
+          // Sincroniza usuários
+          if (globalData.users && globalData.users.length) {
+            for (let u of globalData.users) {
+              const localU = await db.users.get(u.username);
+              if (!localU || localU.balance !== u.balance) {
+                await db.users.put(u);
+              }
+            }
+          }
+
+          // Sincroniza transações
+          if (globalData.transactions && globalData.transactions.length) {
+            for (let tx of globalData.transactions) {
+              const localTx = await db.transactions.get(tx.id);
+              if (!localTx) {
+                await db.transactions.put(tx);
+              }
+            }
+          }
+
+          // Sincroniza relatos do feed
+          if (globalData.reviews && globalData.reviews.length) {
+            for (let rev of globalData.reviews) {
+              const localRev = await db.reviews.get(rev.id);
+              if (!localRev) {
+                await db.reviews.put(rev);
+              }
+            }
+          }
+
+          await loadRegisteredUsers();
+          await loadAllReviews();
+          setGithubSyncStatus('synced');
+          console.log("Banco de dados NTC sincronizado de database.json!");
+        } catch (err) {
+          console.warn("Falha de leitura direta do database.json:", err);
+          setGithubSyncStatus('offline');
+        }
+      };
+
+      // 2. PUSH (Compila o IndexedDB e sincroniza via Netlify Serverless Function)
+      // ✅ SEGURO: A função serverless tem acesso ao token via variáveis de ambiente
+      const pushToGitHub = async () => {
+        setGithubSyncStatus('loading');
+        try {
+          // Reunimos todos os dados locais
+          const users = await db.users.toArray();
+          const transactions = await db.transactions.toArray();
+          const notes = await db.notes.toArray();
+          const reviews = await db.reviews.toArray();
+
+          const payload = {
+            users,
+            transactions,
+            notes,
+            reviews,
+            updatedAt: new Date().toISOString(),
+            version: "2.5"
+          };
+
+          // Chama a função serverless (o token está protegido em variáveis de ambiente)
+          const res = await fetch('/.netlify/functions/github-sync', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              action: 'push',
+              payload: payload
+            })
+          });
+
+          const result = await res.json();
+
+          if (res.ok) {
+            setGithubSyncStatus('synced');
+            showToast("✨ Banco de dados sincronizado de forma segura com GitHub!");
+          } else {
+            console.error("Erro na sincronização:", result);
+            setGithubSyncStatus('offline');
+            showToast("Falha ao sincronizar. Verifique as variáveis de ambiente no Netlify.", "error");
+          }
+
+        } catch (err) {
+          console.error("Falha ao salvar no GitHub:", err);
+          setGithubSyncStatus('offline');
+          showToast("Erro de conectividade com o servidor. Dados salvos localmente.", "error");
+        }
+      };
+
+      // Configurações do GitHub agora são gerenciadas por variáveis de ambiente no Netlify
+      // Não é mais necessário armazenar credenciais no cliente!
+
+      // --- EXPORTAR BANCO DE DADOS (Cria arquivo portátil JSON manual) ---
+      const handleExportDatabase = async () => {
+        try {
+          const users = await db.users.toArray();
+          const transactions = await db.transactions.toArray();
+          const notes = await db.notes.toArray();
+          const reviews = await db.reviews.toArray();
+          
+          const backupData = {
+            users,
+            transactions,
+            notes,
+            reviews,
+            exportedAt: new Date().toISOString(),
+            version: "2.5"
+          };
+
+          const jsonString = `data:text/json;charset=utf-8,${encodeURIComponent(
+            JSON.stringify(backupData, null, 2)
+          )}`;
+          
+          const downloadAnchor = document.createElement('a');
+          downloadAnchor.setAttribute("href", jsonString);
+          downloadAnchor.setAttribute("download", `ntc_ecosystem_db_${Date.now()}.json`);
+          document.body.appendChild(downloadAnchor);
+          downloadAnchor.click();
+          downloadAnchor.remove();
+
+          showToast("Matriz de banco exportada para arquivo JSON com sucesso!");
+        } catch (err) {
+          console.error("Erro ao exportar banco local:", err);
+          showToast("Erro crítico na compilação do arquivo de backup.", "error");
+        }
+      };
+
+      // --- IMPORTAR BANCO DE DADOS (Carrega o arquivo JSON e re-insere no Dexie) ---
+      const handleImportDatabase = (e) => {
+        const fileReader = new FileReader();
+        const file = e.target.files[0];
+        
+        if (!file) return;
+
+        fileReader.onload = async (event) => {
+          try {
+            const importedData = JSON.parse(event.target.result);
+            
+            if (!importedData.users || !importedData.transactions) {
+              showToast("Arquivo inválido. Formato de backup NTC corrompido.", "error");
+              return;
+            }
+
+            // Limpa as tabelas existentes para não dar colisão de chave primária
+            await db.users.clear();
+            await db.transactions.clear();
+            await db.notes.clear();
+            await db.reviews.clear();
+
+            // Insere os registros importados
+            if (importedData.users.length) {
+              await db.users.bulkAdd(importedData.users);
+            }
+            if (importedData.transactions.length) {
+              await db.transactions.bulkAdd(importedData.transactions);
+            }
+            if (importedData.notes && importedData.notes.length) {
+              await db.notes.bulkAdd(importedData.notes);
+            }
+            if (importedData.reviews && importedData.reviews.length) {
+              await db.reviews.bulkAdd(importedData.reviews);
+            }
+
+            showToast("Banco de Dados portátil sincronizado com sucesso!");
+            
+            await loadRegisteredUsers();
+            await loadAllReviews();
+            
+            if (importedData.users.length > 0) {
+              const firstUser = importedData.users[0].username;
+              localStorage.setItem('ntc_logged_user', firstUser);
+              await loadUserData(firstUser);
+            } else {
+              window.location.reload();
+            }
+
+            // Tenta salvar no GitHub se houver token
+            await pushToGitHub();
+
+          } catch (err) {
+            console.error("Erro na leitura da importação:", err);
+            showToast("Falha ao analisar a estrutura do arquivo JSON.", "error");
+          }
+        };
+
+        fileReader.readAsText(file);
+      };
+
+      // --- SISTEMA DE REGISTRO SEGURO ---
+      const handleRegisterRequest = (e) => {
+        e.preventDefault();
+        setAuthError('');
+        const name = usernameInput.trim().toLowerCase();
+        if (!name) {
+          setAuthError('Você precisa definir um codinome/usuário.');
+          return;
+        }
+
+        // Verifica se nome de usuário já existe no banco SQLite local (IndexedDB)
+        db.users.get(name).then(exists => {
+          if (exists) {
+            setAuthError('Este nome de usuário já foi registrado neste dispositivo.');
+          } else {
+            const seed = generateNewSeed();
+            setGeneratedSeed(seed);
+            setAuthMode('seed_display');
+          }
+        });
+      };
+
+      const handleConfirmRegister = async () => {
+        const name = usernameInput.trim().toLowerCase();
+        const address = generateAddressFromSeed(generatedSeed);
+
+        const newUserObj = {
+          username: name,
+          address: address,
+          seed: generatedSeed,
+          balance: 20.00, // Bônus inicial maior de boas-vindas
+          unlockedFeatures: {
+            neonThemes: false,
+            youtubePlayer: false,
+            fusionEngine: false,
+            customAvatar: false
+          },
+          activeNeon: 'purple',
+          profileBio: 'Agente cibernético na rede AceleraNet.',
+          profileAvatar: 'https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe?w=150&auto=format&fit=crop&q=80'
+        };
+
+        try {
+          await db.users.add(newUserObj);
+          
+          await db.transactions.add({
+            id: 'TX-BOASVINDAS-' + Date.now(),
+            username: name,
+            toAddress: address,
+            fromUser: "SISTEMA",
+            amount: 20.00,
+            date: new Date().toLocaleString(),
+            claimed: true
+          });
+
+          localStorage.setItem('ntc_logged_user', name);
+          await loadRegisteredUsers();
+          await loadUserData(name);
+          showToast("Sua identidade foi selada e criptografada com sucesso!");
+          
+          // Envia o novo registro imediatamente para o repositório se o token estiver ativado
+          await pushToGitHub();
+        } catch (err) {
+          setAuthError("Falha ao salvar conta no banco de dados.");
+          console.error(err);
+        }
+      };
+
+      // --- SISTEMA DE LOGIN VIA FRASE SEMENTE ---
+      const handleLoginRequest = async (e) => {
+        e.preventDefault();
+        setAuthError('');
+        const seed = seedInput.trim().toLowerCase();
+        if (!seed) {
+          setAuthError('Digite sua frase semente ou selecione um perfil salvo.');
+          return;
+        }
+
+        try {
+          const matchedUser = await db.users.where("seed").equals(seed).first();
+          if (matchedUser) {
+            localStorage.setItem('ntc_logged_user', matchedUser.username);
+            await loadUserData(matchedUser.username);
+          } else {
+            const generatedAddr = generateAddressFromSeed(seed);
+            setAuthError(`Semente válida, mas nenhuma carteira associada neste terminal. Endereço gerado seria: ${generatedAddr.substring(0, 10)}...`);
+          }
+        } catch (err) {
+          setAuthError('Erro na checagem criptográfica.');
+        }
+      };
+
+      // --- LOGOUT SEGURO ---
+      const handleLogout = () => {
+        localStorage.removeItem('ntc_logged_user');
+        setCurrentUser(null);
+        setActiveTab('auth');
+        setUsernameInput('');
+        setSeedInput('');
+        showToast("Sessão finalizada com segurança.", "error");
+      };
+
+      // --- NOTIFICAÇÕES (TOAST) ---
+      const showToast = (message, type = "success") => {
+        setToast({ message, type });
+        setTimeout(() => setToast(null), 3500);
+      };
+
+      // --- MURAL DE NOTAS (INDEXEDDB MULTIUSER) ---
+      const handleAddNote = async (e) => {
+        e.preventDefault();
+        if (!newNoteText.trim()) return;
+
+        try {
+          const noteObj = {
+            username: currentUser.username,
+            text: newNoteText.trim(),
+            color: activeNeon
+          };
+          await db.notes.add(noteObj);
+          
+          const updatedNotes = await db.notes.where("username").equals(currentUser.username).toArray();
+          setNotesList(updatedNotes);
+          setNewNoteText('');
+          showToast("Anotação fixa de segurança salva!");
+          await pushToGitHub();
+        } catch (err) {
+          console.error(err);
+        }
+      };
+
+      const handleDeleteNote = async (id) => {
+        try {
+          await db.notes.delete(id);
+          setNotesList(notesList.filter(n => n.id !== id));
+          showToast("Nota descartada.", "error");
+          await pushToGitHub();
+        } catch (err) {
+          console.error(err);
+        }
+      };
+
+      // --- VALIDAÇÃO DE ENDEREÇO EM TEMPO REAL ---
+      useEffect(() => {
+        if (!sendTargetAddress) {
+          setTargetUserFound(null);
+          return;
+        }
+
+        const addressToFind = sendTargetAddress.trim().toUpperCase();
+        if (addressToFind.length < 10) return;
+
+        setIsValidatingAddress(true);
+        const timer = setTimeout(async () => {
+          try {
+            const matched = await db.users.where("address").equals(addressToFind).first();
+            if (matched) {
+              setTargetUserFound(matched);
+            } else {
+              setTargetUserFound(null);
+            }
+          } catch (e) {
+            console.error(e);
+          } finally {
+            setIsValidatingAddress(false);
+          }
+        }, 500);
+
+        return () => clearTimeout(timer);
+      }, [sendTargetAddress]);
+
+      // --- TRANSFERÊNCIA REAL DE NTC (P2P MULTIUSER INDEXEDDB) ---
+      const handleExecuteTransfer = async (e) => {
+        e.preventDefault();
+        const amount = parseFloat(sendAmount);
+        if (isNaN(amount) || amount <= 0) {
+          showToast("Digite uma quantidade válida para transferência.", "error");
+          return;
+        }
+
+        if (balance < amount) {
+          showToast("Balanço insuficiente de Notoriety Coin.", "error");
+          return;
+        }
+
+        if (!targetUserFound) {
+          showToast("Endereço de destino não encontrado na rede local.", "error");
+          return;
+        }
+
+        if (targetUserFound.address === currentUser.address) {
+          showToast("Você não pode transferir moedas para si mesmo.", "error");
+          return;
+        }
+
+        try {
+          // Desconta do remetente
+          const senderNewBalance = Number((balance - amount).toFixed(4));
+          await db.users.update(currentUser.username, { balance: senderNewBalance });
+
+          // Adiciona ao destinatário
+          const receiverNewBalance = Number((targetUserFound.balance + amount).toFixed(4));
+          await db.users.update(targetUserFound.username, { balance: receiverNewBalance });
+
+          const transactionId = 'TX-TRANSFER-' + Date.now();
+
+          // Grava log da transação para o remetente
+          const txRecordSender = {
+            id: transactionId + '-S',
+            username: currentUser.username,
+            toAddress: targetUserFound.address,
+            fromUser: currentUser.username,
+            amount: -amount,
+            date: new Date().toLocaleString(),
+            claimed: true
+          };
+          await db.transactions.add(txRecordSender);
+
+          // Grava log da transação para o destinatário
+          const txRecordReceiver = {
+            id: transactionId + '-R',
+            username: targetUserFound.username,
+            toAddress: targetUserFound.address,
+            fromUser: currentUser.username,
+            amount: amount,
+            date: new Date().toLocaleString(),
+            claimed: true
+          };
+          await db.transactions.add(txRecordReceiver);
+
+          // Atualiza estados do remetente logado
+          setBalance(senderNewBalance);
+          setSendTargetAddress('');
+          setSendAmount('');
+          setTargetUserFound(null);
+
+          // Recarrega transações
+          const updatedHistory = await db.transactions
+            .where("username")
+            .equals(currentUser.username)
+            .or("toAddress")
+            .equals(currentUser.address)
+            .reverse()
+            .toArray();
+          setHistory(updatedHistory);
+
+          showToast(`Sucesso! Enviado ${amount.toFixed(2)} NTC para @${targetUserFound.username}`);
+
+          // Envia a nova transação para o Ledger Global no GitHub Repo
+          await pushToGitHub();
+        } catch (err) {
+          console.error(err);
+          showToast("Falha operacional ao processar transação no banco local.", "error");
+        }
+      };
+
+      // --- ROLETA MOLECULAR (SORTEIO DE NTC COM INDEXEDDB) ---
+      const spinWheel = () => {
+        if (isSpinning || spinCooldown > 0) return;
+        setIsSpinning(true);
+        setSpinResult(null);
+
+        const prizes = [
+          { value: 0.1, label: '0.1 NTC (Farm Solar)' },
+          { value: 0.5, label: '0.5 NTC (Sinal de Dados)' },
+          { value: 1.0, label: '1.0 NTC (Código Estável)' },
+          { value: 3.0, label: '3.0 NTC (Bônus de Rede)' },
+          { value: 0.0, label: 'Sem Conexão (Tente de Novo)' },
+          { value: 8.0, label: 'JACKPOT CRÍPTICO (8.0 NTC)' }
+        ];
+
+        const chosenIndex = Math.floor(Math.random() * prizes.length);
+        const win = prizes[chosenIndex];
+
+        spinRotation.current = spinRotation.current + 1440 + (chosenIndex * 60);
+
+        setTimeout(async () => {
+          setIsSpinning(false);
+          setSpinResult(win);
+
+          if (win.value > 0) {
+            try {
+              const newBal = Number((balance + win.value).toFixed(4));
+              await db.users.update(currentUser.username, { balance: newBal });
+              
+              await db.transactions.add({
+                id: 'TX-SPIN-' + Date.now(),
+                username: currentUser.username,
+                toAddress: currentUser.address,
+                fromUser: "SISTEMA (Roleta)",
+                amount: win.value,
+                date: new Date().toLocaleString(),
+                claimed: true
+              });
+
+              setBalance(newBal);
+              
+              const updatedHistory = await db.transactions
+                .where("username")
+                .equals(currentUser.username)
+                .or("toAddress")
+                .equals(currentUser.address)
+                .reverse()
+                .toArray();
+              setHistory(updatedHistory);
+
+              showToast(`Você farmou +${win.value} NTC na roleta molecular!`);
+              await pushToGitHub();
+            } catch (err) {
+              console.error(err);
+            }
+          } else {
+            showToast("Vórtice instável. Nenhum NTC sintetizado desta vez.", "error");
+          }
+
+          setSpinCooldown(45); 
+        }, 3200);
+      };
+
+      // Cooldown & Engine Mineração Loop
+      useEffect(() => {
+        const interval = setInterval(() => {
+          if (spinCooldown > 0) {
+            setSpinCooldown(prev => prev - 1);
+          }
+
+          setEngines(prev => {
+            let stateChanged = false;
+            const updatedEngines = { ...prev };
+
+            Object.keys(updatedEngines).forEach(key => {
+              const engine = updatedEngines[key];
+              if (engine.active && engine.timeLeft > 0) {
+                engine.timeLeft -= 1;
+                stateChanged = true;
+
+                if (engine.timeLeft === 0) {
+                  engine.active = false;
+                  payoutMiningReward(engine.reward, engine.label);
+                }
+              }
+            });
+
+            return stateChanged ? updatedEngines : prev;
+          });
+        }, 1000);
+
+        return () => clearInterval(interval);
+      }, [engines, balance]);
+
+      const payoutMiningReward = async (reward, label) => {
+        try {
+          const finalBal = Number((balance + reward).toFixed(4));
+          await db.users.update(currentUser.username, { balance: finalBal });
+
+          await db.transactions.add({
+            id: 'TX-MINING-' + Date.now(),
+            username: currentUser.username,
+            toAddress: currentUser.address,
+            fromUser: `MINERAÇÃO (${label})`,
+            amount: reward,
+            date: new Date().toLocaleString(),
+            claimed: true
+          });
+
+          setBalance(finalBal);
+          
+          const updatedHistory = await db.transactions
+            .where("username")
+            .equals(currentUser.username)
+            .or("toAddress")
+            .equals(currentUser.address)
+            .reverse()
+            .toArray();
+          setHistory(updatedHistory);
+
+          showToast(`Ciclo completo! ${label} pagou +${reward} NTC.`);
+          await pushToGitHub();
+        } catch (err) {
+          console.error(err);
+        }
+      };
+
+      const handleStartEngine = (key) => {
+        const engine = engines[key];
+        if (engine.active) return;
+
+        setEngines(prev => ({
+          ...prev,
+          [key]: {
+            ...prev[key],
+            active: true,
+            timeLeft: engine.duration
+          }
+        }));
+
+        showToast(`Motor de indução "${engine.label}" iniciado!`);
+      };
+
+      const handleBuyUpgrade = async (key) => {
+        const product = SHOP_ITEMS[key];
+        if (!product) return;
+
+        if (balance < product.price) {
+          showToast("Saldo Notoriety Coin insuficiente para este upgrade.", "error");
+          return;
+        }
+
+        try {
+          const nextBal = Number((balance - product.price).toFixed(4));
+          const updatedUnlocked = { ...unlockedFeatures, [key]: true };
+
+          await db.users.update(currentUser.username, {
+            balance: nextBal,
+            unlockedFeatures: updatedUnlocked
+          });
+
+          await db.transactions.add({
+            id: 'TX-SHOP-' + Date.now(),
+            username: currentUser.username,
+            toAddress: "UPGRADE SHOP",
+            fromUser: currentUser.username,
+            amount: -product.price,
+            date: new Date().toLocaleString(),
+            claimed: true
+          });
+
+          setBalance(nextBal);
+          setUnlockedFeatures(updatedUnlocked);
+
+          const updatedHistory = await db.transactions
+            .where("username")
+            .equals(currentUser.username)
+            .or("toAddress")
+            .equals(currentUser.address)
+            .reverse()
+            .toArray();
+          setHistory(updatedHistory);
+
+          showToast(`Módulo "${product.label}" adicionado ao sistema!`);
+          await pushToGitHub();
+        } catch (err) {
+          console.error(err);
+        }
+      };
+
+      const handlePublishReview = async (e) => {
+        e.preventDefault();
+        if (!newReview.title || !newReview.host || !newReview.reviewText) {
+          showToast("Por favor, preencha todos os campos do log cibernético.", "error");
+          return;
+        }
+
+        if (!newReview.consented) {
+          showToast("É obrigatório validar o consentimento de rede.", "error");
+          return;
+        }
+
+        try {
+          const reviewObj = {
+            id: 'REV-' + Date.now(),
+            author: currentUser.username,
+            title: newReview.title.trim(),
+            host: newReview.host.trim(),
+            vibe: parseInt(newReview.vibe),
+            reviewText: newReview.reviewText.trim(),
+            timestamp: new Date().toLocaleString()
+          };
+
+          await db.reviews.add(reviewObj);
+
+          const incentiveReward = 1.50;
+          const updatedBal = Number((balance + incentiveReward).toFixed(4));
+          await db.users.update(currentUser.username, { balance: updatedBal });
+
+          await db.transactions.add({
+            id: 'TX-REV-BONUS-' + Date.now(),
+            username: currentUser.username,
+            toAddress: currentUser.address,
+            fromUser: "MURAL INCENTIVO",
+            amount: incentiveReward,
+            date: new Date().toLocaleString(),
+            claimed: true
+          });
+
+          setBalance(updatedBal);
+          setNewReview({ title: '', host: '', vibe: 5, reviewText: '', consented: false });
+          
+          await loadAllReviews();
+          
+          const updatedHistory = await db.transactions
+            .where("username")
+            .equals(currentUser.username)
+            .or("toAddress")
+            .equals(currentUser.address)
+            .reverse()
+            .toArray();
+          setHistory(updatedHistory);
+
+          showToast("Log de experiência adicionado! +1.50 NTC injetado.");
+          await pushToGitHub();
+        } catch (err) {
+          console.error(err);
+        }
+      };
+
+      const handleUpdateProfile = async (e) => {
+        e.preventDefault();
+        try {
+          const updatedObj = {
+            profileBio,
+            profileAvatar,
+            activeNeon
+          };
+          await db.users.update(currentUser.username, updatedObj);
+          showToast("Sinal de identidade modificado no banco!");
+          await pushToGitHub();
+        } catch (err) {
+          console.error(err);
+        }
+      };
+
+      // --- ESCUTA CONEXÕES EXTERNAS (BARRAMENTO DE GAMES / APPS EMBEDADOS) ---
+      useEffect(() => {
+        const handleExternalMessage = (event) => {
+          const { data } = event;
+          if (!data || data.source !== 'NTC_PARTNER_SITE') return;
+
+          if (data.type === 'REQUEST_CONNECTION') {
+            setPendingRequests(prev => [...prev, {
+              id: data.requestId,
+              origin: event.origin,
+              type: 'connect',
+              title: 'Autorizar Conexão de Carteira',
+              desc: `O portal externo em ${event.origin} está solicitando leitura do seu endereço de carteira local e pseudônimo.`,
+              sourceWindow: event.source
+            }]);
+          } else if (data.type === 'REQUEST_TRANSACTION') {
+            const amountVal = parseFloat(data.amount);
+            const isSpend = data.txType === 'SPEND';
+
+            setPendingRequests(prev => [...prev, {
+              id: data.requestId,
+              origin: event.origin,
+              type: 'transaction',
+              txType: data.txType || 'EARN',
+              title: isSpend ? 'Autorizar Débito Seguro' : 'Coletar Recompensa Cyber',
+              desc: isSpend
+                ? `O site parceiro ${event.origin} deseja retirar ${amountVal} NTC de sua conta para liberar: "${data.label || 'Item Digital'}"`
+                : `Você recebeu uma proposta de crédito de ${amountVal} NTC via "${data.label || 'Missão Computada'}".`,
+              amount: amountVal,
+              label: data.label || 'Transação Segura',
+              sourceWindow: event.source
+            }]);
+          }
+        };
+
+        window.addEventListener('message', handleExternalMessage);
+        return () => window.removeEventListener('message', handleExternalMessage);
+      }, [currentUser, balance]);
+
+      const [pendingRequests, setPendingRequests] = useState([]);
+
+      const handleApproveExternal = async (req) => {
+        if (!currentUser) return;
+
+        if (req.type === 'connect') {
+          req.sourceWindow.postMessage({
+            type: 'NTC_CONNECTION_RESPONSE',
+            requestId: req.id,
+            status: 'approved',
+            address: currentUser.address,
+            username: currentUser.username
+          }, req.origin);
+          showToast("Barramento de dados conectado com sucesso!");
+        } else if (req.type === 'transaction') {
+          const isSpend = req.txType === 'SPEND';
+          if (isSpend && balance < req.amount) {
+            showToast("Balanço NTC insuficiente para autorizar o débito.", "error");
+            req.sourceWindow.postMessage({
+              type: 'NTC_TRANSACTION_RESPONSE',
+              requestId: req.id,
+              status: 'declined',
+              error: 'Saldo insuficiente.'
+            }, req.origin);
+            setPendingRequests(prev => prev.filter(p => p.id !== req.id));
+            return;
+          }
+
+          const multiplier = isSpend ? -1 : 1;
+          const nextBal = Number((balance + (req.amount * multiplier)).toFixed(4));
+
+          try {
+            await db.users.update(currentUser.username, { balance: nextBal });
+            await db.transactions.add({
+              id: 'TX-EXTERNAL-' + Date.now(),
+              username: currentUser.username,
+              toAddress: isSpend ? "LOJA PARCEIRA" : currentUser.address,
+              fromUser: isSpend ? currentUser.username : "RECOMPENSA PARCEIRA",
+              amount: req.amount * multiplier,
+              date: new Date().toLocaleString(),
+              claimed: true
+            });
+
+            setBalance(nextBal);
+
+            const updatedHistory = await db.transactions
+              .where("username")
+              .equals(currentUser.username)
+              .or("toAddress")
+              .equals(currentUser.address)
+              .reverse()
+              .toArray();
+            setHistory(updatedHistory);
+
+            req.sourceWindow.postMessage({
+              type: 'NTC_TRANSACTION_RESPONSE',
+              requestId: req.id,
+              status: 'approved',
+              newBalance: nextBal
+            }, req.origin);
+
+            showToast(isSpend ? `Transação concluída: -${req.amount} NTC` : `Recompensa aceita: +${req.amount} NTC`);
+            await pushToGitHub();
+          } catch (err) {
+            console.error(err);
+          }
+        }
+        setPendingRequests(prev => prev.filter(p => p.id !== req.id));
+      };
+
+      const handleDeclineExternal = (req) => {
+        req.sourceWindow.postMessage({
+          type: req.type === 'connect' ? 'NTC_CONNECTION_RESPONSE' : 'NTC_TRANSACTION_RESPONSE',
+          requestId: req.id,
+          status: 'declined',
+          error: 'Operação cancelada pelo usuário.'
+        }, req.origin);
+
+        setPendingRequests(prev => prev.filter(p => p.id !== req.id));
+        showToast("Solicitação de barramento rejeitada.", "error");
+      };
+
+      return (
+        <div className="flex-grow flex flex-col justify-between">
+          
+          {/* Header */}
+          <header className={`border-b border-purple-950/40 bg-black/80 backdrop-blur-md px-6 py-4 sticky top-0 z-40 transition-all ${currentNeon.glow}`}>
+            <div className="max-w-6xl mx-auto flex flex-col sm:flex-row sm:justify-between sm:items-center gap-4 font-orbitron">
+              <div className="flex items-center space-x-3">
+                <div className={`h-11 w-11 rounded-xl bg-gradient-to-tr from-purple-600 via-pink-600 to-amber-400 flex items-center justify-center ${currentNeon.glow}`}>
+                  <span className="font-black text-2xl text-white">N</span>
+                </div>
+                <div>
+                  <h1 className="text-xl font-bold tracking-wider text-transparent bg-clip-text bg-gradient-to-r from-purple-400 via-pink-400 to-amber-300">
+                    NTC ECOSYSTEM v2.5
+                  </h1>
+                  <p className="text-[10px] text-purple-300/70 tracking-widest uppercase">Safe Browser Database Terminal</p>
+                </div>
+              </div>
+
+              <div className="flex items-center space-x-3 justify-between sm:justify-end">
+                {currentUser && (
+                  <div className="flex items-center space-x-4 text-xs font-semibold">
+                    <img 
+                      src={profileAvatar} 
+                      alt="Avatar" 
+                      className={`h-9 w-9 rounded-lg object-cover border ${currentNeon.border} ${currentNeon.glow}`} 
+                    />
+                    <div className="text-right">
+                      <span className="text-gray-500 block uppercase text-[8px] tracking-widest">Usuário de Rede</span>
+                      <span className={`${currentNeon.text} font-bold`}>@{currentUser.username}</span>
+                    </div>
+                    
+                    {githubSyncStatus === 'synced' ? (
+                      <span className="text-green-400 flex items-center space-x-1" title="Ledger Global sincronizado com database.json do repositório no GitHub Pages">
+                        <span className="h-2 w-2 rounded-full bg-green-500 animate-pulse"></span>
+                        <span className="hidden md:inline font-mono text-[9px] uppercase tracking-wider">Ledger Sincronizado</span>
+                      </span>
+                    ) : githubSyncStatus === 'loading' ? (
+                      <span className="text-yellow-400 flex items-center space-x-1">
+                        <i data-lucide="refresh-cw" className="w-3 h-3 animate-spin"></i>
+                        <span className="hidden md:inline font-mono text-[9px] uppercase tracking-wider">Gravando Ledger...</span>
+                      </span>
+                    ) : (
+                      <span className="text-gray-500 flex items-center space-x-1" title="Banco operando em modo isolado local">
+                        <span className="h-2 w-2 rounded-full bg-gray-500"></span>
+                        <span className="hidden md:inline font-mono text-[9px] uppercase tracking-wider">DB Local</span>
+                      </span>
+                    )}
+
+                    <button 
+                      onClick={handleLogout} 
+                      className="px-3 py-1.5 bg-red-950/40 text-red-400 hover:text-red-200 hover:bg-red-900/30 border border-red-900/40 rounded-lg transition"
+                    >
+                      Desconectar
+                    </button>
+                  </div>
+                )}
+              </div>
+            </div>
+          </header>
+
+          {/* Modal de Pedido de Barramento Externo */}
+          {pendingRequests.length > 0 && (
+            <div className="fixed inset-0 z-50 bg-black/90 backdrop-blur-md flex items-center justify-center p-4">
+              <div className="bg-[#0b0b14] border-2 border-pink-500 rounded-2xl w-full max-w-md overflow-hidden shadow-2xl animate-bounce">
+                <div className="bg-gradient-to-r from-purple-900 to-pink-900 px-6 py-4 flex items-center space-x-3">
+                  <div className="bg-pink-500/20 p-2 rounded-lg text-pink-400 animate-pulse">
+                    <i data-lucide="shield-alert" className="w-6 h-6"></i>
+                  </div>
+                  <h3 className="font-orbitron font-bold text-lg text-white">Intercepção de Barramento</h3>
+                </div>
+                <div className="p-6 space-y-4">
+                  <p className="text-gray-300 text-sm leading-relaxed">
+                    {pendingRequests[0].desc}
+                  </p>
+                  <div className="bg-black/60 p-3 rounded-lg border border-purple-950">
+                    <span className="text-[9px] text-gray-500 block uppercase font-mono">Assinatura de Origem</span>
+                    <span className="text-xs text-purple-300 font-mono break-all">{pendingRequests[0].origin}</span>
+                    
+                    {pendingRequests[0].amount && (
+                      <div className="mt-3 pt-2 border-t border-purple-950/60 flex justify-between items-center">
+                        <span className="text-xs text-gray-400">Total Solicitado:</span>
+                        <span className={`text-sm font-orbitron font-bold ${pendingRequests[0].txType === 'SPEND' ? 'text-red-400' : 'text-green-400'}`}>
+                          {pendingRequests[0].txType === 'SPEND' ? '-' : '+'}{pendingRequests[0].amount.toFixed(2)} NTC
+                        </span>
+                      </div>
+                    )}
+                  </div>
+                  <div className="grid grid-cols-2 gap-3 pt-2">
+                    <button
+                      onClick={() => handleDeclineExternal(pendingRequests[0])}
+                      className="px-4 py-2.5 rounded-xl bg-slate-900 hover:bg-slate-800 text-xs font-orbitron font-bold transition text-gray-400"
+                    >
+                      RECUSAR
+                    </button>
+                    <button
+                      onClick={() => handleApproveExternal(pendingRequests[0])}
+                      className="px-4 py-2.5 rounded-xl bg-gradient-to-r from-purple-600 to-pink-500 hover:from-purple-500 hover:to-pink-400 text-white text-xs font-orbitron font-bold transition shadow-lg"
+                    >
+                      AUTORIZAR
+                    </button>
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* Notificação Flutuante */}
+          {toast && (
+            <div className="fixed bottom-6 right-6 z-50 animate-pulse">
+              <div className={`p-4 rounded-xl border-2 flex items-center space-x-3 text-sm shadow-2xl font-bold font-orbitron ${toast.type === 'error' ? 'bg-red-950/90 border-red-500 text-red-300' : 'bg-emerald-950/90 border-emerald-500 text-emerald-300'}`}>
+                <span className="h-2 w-2 rounded-full bg-current animate-ping"></span>
+                <span>{toast.message}</span>
+              </div>
+            </div>
+          )}
+
+          {/* Área Principal de Conteúdo */}
+          <main className="flex-grow max-w-6xl w-full mx-auto p-4 md:p-6 flex flex-col justify-start">
+            
+            {/* TELA DE AUTENTICAÇÃO */}
+            {activeTab === 'auth' && (
+              <div className="flex-grow flex flex-col items-center justify-center py-10 space-y-6">
+                <div className="w-full max-w-lg bg-[#080812] border border-purple-900/60 rounded-3xl p-8 shadow-2xl relative overflow-hidden">
+                  <div className="glow-overlay"></div>
+                  
+                  <div className="text-center mb-8 relative z-10">
+                    <span className="px-3.5 py-1.5 rounded-full text-[10px] font-bold bg-purple-500/10 text-purple-300 border border-purple-500/20 uppercase tracking-widest font-orbitron animate-pulse">
+                      Ledger Global via GitHub Pages
+                    </span>
+                    <h2 className="text-4xl font-black font-orbitron mt-4 tracking-wide text-transparent bg-clip-text bg-gradient-to-r from-purple-400 via-pink-400 to-amber-300">
+                      SECURE TERMINAL
+                    </h2>
+                    <p className="text-xs text-gray-400 mt-2 leading-relaxed">
+                      Sua carteira criptográfica se sincroniza de forma automática e descentralizada carregando o arquivo <code className="text-pink-400 font-mono">database.json</code> do repositório de forma limpa.
+                    </p>
+                  </div>
+
+                  {authError && (
+                    <div className="p-3 bg-red-950/40 border-2 border-red-500/40 rounded-xl text-red-300 text-xs font-semibold mb-4 text-center">
+                      {authError}
+                    </div>
+                  )}
+
+                  {authMode === 'login' && (
+                    <div className="space-y-6 relative z-10">
+                      <form onSubmit={handleLoginRequest} className="space-y-4">
+                        <div>
+                          <label className="block text-[10px] font-bold uppercase tracking-widest text-purple-300 mb-2">Frase Semente de Segurança (12 palavras)</label>
+                          <textarea
+                            rows="3"
+                            value={seedInput}
+                            onChange={(e) => setSeedInput(e.target.value)}
+                            placeholder="EX: matrix net cyber token neon flow delta fusion protocol node quantum sync"
+                            className="w-full bg-black/60 border border-purple-900/50 rounded-xl py-3 px-4 text-white text-xs font-mono focus:outline-none focus:ring-1 focus:ring-pink-500"
+                          ></textarea>
+                        </div>
+                        <button type="submit" className="w-full py-3.5 bg-gradient-to-r from-purple-600 to-pink-500 hover:from-purple-500 hover:to-pink-400 text-white font-orbitron font-black rounded-xl transition shadow-xl uppercase tracking-wider text-xs">
+                          Sincronizar Carteira Cryptografica
+                        </button>
+                      </form>
+
+                      {registeredUsers.length > 0 && (
+                        <div className="pt-4 border-t border-purple-950/80">
+                          <p className="text-[10px] uppercase font-bold text-gray-500 tracking-wider mb-2">Perfis Locais Reconhecidos no Ledger</p>
+                          <div className="grid grid-cols-2 gap-2 max-h-[120px] overflow-y-auto pr-1">
+                            {registeredUsers.map((u) => (
+                              <button
+                                key={u.username}
+                                onClick={() => loadUserData(u.username)}
+                                className="p-2.5 bg-black/40 border border-purple-950 hover:border-purple-500 rounded-xl text-left flex items-center space-x-2.5 transition"
+                              >
+                                <img src={u.profileAvatar} className="h-6 w-6 rounded object-cover border border-purple-900" />
+                                <div className="truncate">
+                                  <span className="block text-xs font-bold text-gray-200">@{u.username}</span>
+                                  <span className="block text-[8px] text-gray-500 font-mono truncate">{u.address.substring(0, 12)}...</span>
+                                </div>
+                              </button>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  )}
+
+                  {authMode === 'register' && (
+                    <form onSubmit={handleRegisterRequest} className="space-y-4 relative z-10">
+                      <div>
+                        <label className="block text-[10px] font-bold uppercase tracking-widest text-purple-300 mb-2">Codinome do Agente (Username Único)</label>
+                        <input
+                          type="text"
+                          value={usernameInput}
+                          onChange={(e) => setUsernameInput(e.target.value)}
+                          placeholder="EX: cyber_nomad"
+                          className="w-full bg-black/60 border border-purple-900/50 rounded-xl py-3 px-4 text-white text-xs focus:outline-none focus:ring-1 focus:ring-pink-500"
+                        />
+                      </div>
+                      <button type="submit" className="w-full py-3.5 bg-gradient-to-r from-purple-600 to-pink-500 hover:from-purple-500 hover:to-pink-400 text-white font-orbitron font-black rounded-xl transition uppercase tracking-wider text-xs shadow-xl">
+                        Gerar Matriz de Semente Segura
+                      </button>
+                    </form>
+                  )}
+
+                  {authMode === 'seed_display' && (
+                    <div className="space-y-6 relative z-10">
+                      <div className="p-4 bg-amber-950/30 border border-amber-500/30 rounded-xl text-amber-300 text-xs">
+                        <strong>REGISTRO CRÍTICO DE SEGURANÇA:</strong> Esta frase semente é o seu acesso master ao balanço de moedas. Copie de forma segura. Em caso de perda do banco de dados local, você necessitará destas 12 palavras para ressuscitar seus fundos.
+                      </div>
+                      <div className="bg-black p-4 rounded-xl border border-purple-900 text-center">
+                        <p className="font-mono text-xs tracking-wider text-pink-400 select-all font-semibold leading-relaxed">{generatedSeed}</p>
+                      </div>
+                      <button onClick={handleConfirmRegister} className="w-full py-3.5 bg-emerald-600 hover:bg-emerald-500 text-white font-orbitron font-black rounded-xl transition uppercase tracking-wider text-xs">
+                        EU GRAVEI MINHA SEMENTE! ENTRAR NO TERMINAL
+                      </button>
+                    </div>
+                  )}
+
+                  <div className="text-center mt-6 pt-6 border-t border-purple-950/60 flex flex-col space-y-2 relative z-10">
+                    {authMode === 'login' ? (
+                      <button onClick={() => setAuthMode('register')} className="text-xs text-pink-400 hover:text-pink-300 font-bold uppercase tracking-wider">
+                        Criar Novo Usuário no Banco Local
+                      </button>
+                    ) : (
+                      <button onClick={() => setAuthMode('login')} className="text-xs text-pink-400 hover:text-pink-300 font-bold uppercase tracking-wider">
+                        Voltar para Identificação Master
+                      </button>
+                    )}
+                  </div>
+
+                </div>
+
+                {/* SINC INTER-DISPOSITIVO MANUAL */}
+                <div className="w-full max-w-lg bg-[#080812] border border-pink-900/40 rounded-3xl p-6 shadow-xl relative overflow-hidden">
+                  <h3 className="text-xs font-orbitron font-bold text-pink-400 uppercase tracking-widest mb-2"> Sincronização e Backup Portátil</h3>
+                  <p className="text-[11px] text-gray-400 leading-normal mb-4">
+                    Se você não configurou o Token de Sincronização Automática com o seu Repositório do GitHub, use esta ferramenta para baixar ou importar sua carteira manualmente.
+                  </p>
+                  
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    <button 
+                      onClick={handleExportDatabase}
+                      className="py-2 px-3 bg-purple-950 hover:bg-purple-900 border border-purple-800 text-purple-300 text-xs font-semibold font-orbitron rounded-xl transition flex items-center justify-center space-x-1.5"
+                    >
+                      <span>📥 Exportar Banco (.json)</span>
+                    </button>
+                    
+                    <label className="py-2 px-3 bg-pink-950/80 hover:bg-pink-900 border border-pink-800 text-pink-300 text-xs font-semibold font-orbitron rounded-xl transition flex items-center justify-center space-x-1.5 cursor-pointer text-center">
+                      <span>📤 Importar Banco (.json)</span>
+                      <input 
+                        type="file" 
+                        accept=".json" 
+                        onChange={handleImportDatabase} 
+                        className="hidden" 
+                      />
+                    </label>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* PAINEL CONTROLADOR DO USUÁRIO LOGADO */}
+            {currentUser && (
+              <div className="space-y-6">
+                
+                {/* Menu Navegacional */}
+                <div className="flex border-b border-purple-950/60 overflow-x-auto text-sm font-semibold">
+                  <button onClick={() => setActiveTab('dashboard')} className={`pb-3 px-6 uppercase font-bold tracking-wider border-b-2 transition-all flex items-center space-x-2 whitespace-nowrap ${activeTab === 'dashboard' ? 'border-pink-500 text-pink-400' : 'border-transparent text-gray-400 hover:text-gray-200'}`}>
+                    <i data-lucide="wallet" className="w-4 h-4"></i>
+                    <span>Painel & Enviar</span>
+                  </button>
+                  <button onClick={() => setActiveTab('farm')} className={`pb-3 px-6 uppercase font-bold tracking-wider border-b-2 transition-all flex items-center space-x-2 whitespace-nowrap ${activeTab === 'farm' ? 'border-pink-500 text-pink-400' : 'border-transparent text-gray-400 hover:text-gray-200'}`}>
+                    <i data-lucide="cpu" className="w-4 h-4"></i>
+                    <span>Estação de Farm</span>
+                  </button>
+                  <button onClick={() => setActiveTab('cyber-profile')} className={`pb-3 px-6 uppercase font-bold tracking-wider border-b-2 transition-all flex items-center space-x-2 whitespace-nowrap ${activeTab === 'cyber-profile' ? 'border-pink-500 text-pink-400' : 'border-transparent text-gray-400 hover:text-gray-200'}`}>
+                    <i data-lucide="user" className="w-4 h-4"></i>
+                    <span>Perfil Cibernético</span>
+                  </button>
+                  <button onClick={() => setActiveTab('home-reviews')} className={`pb-3 px-6 uppercase font-bold tracking-wider border-b-2 transition-all flex items-center space-x-2 whitespace-nowrap ${activeTab === 'home-reviews' ? 'border-pink-500 text-pink-400' : 'border-transparent text-gray-400 hover:text-gray-200'}`}>
+                    <i data-lucide="message-square" className="w-4 h-4"></i>
+                    <span>Feed & Logs</span>
+                  </button>
+                  <button onClick={() => setActiveTab('embed')} className={`pb-3 px-6 uppercase font-bold tracking-wider border-b-2 transition-all flex items-center space-x-2 whitespace-nowrap ${activeTab === 'embed' ? 'border-pink-500 text-pink-400' : 'border-transparent text-gray-400 hover:text-gray-200'}`}>
+                    <i data-lucide="code" className="w-4 h-4"></i>
+                    <span>Widget Embed</span>
+                  </button>
+                  <button onClick={() => setActiveTab('backup-sync')} className={`pb-3 px-6 uppercase font-bold tracking-wider border-b-2 transition-all flex items-center space-x-2 whitespace-nowrap ${activeTab === 'backup-sync' ? 'border-pink-500 text-pink-400' : 'border-transparent text-gray-400 hover:text-gray-200'}`}>
+                    <i data-lucide="refresh-cw" className="w-4 h-4"></i>
+                    <span>Sincronizar Arquivo</span>
+                  </button>
+                </div>
+
+                {/* ABA 1: PAINEL DE SALDO E TRANSFERÊNCIAS */}
+                {activeTab === 'dashboard' && (
+                  <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                    <div className="lg:col-span-2 space-y-6">
+                      
+                      {/* CARD DO BALANÇO CYBER */}
+                      <div className={`bg-gradient-to-r ${currentNeon.bgTo} border-2 ${currentNeon.border} rounded-2xl p-6 relative overflow-hidden flex flex-col justify-between h-[210px] transition-all ${currentNeon.glow}`}>
+                        <div className="absolute right-[-10px] top-[-10px] opacity-10 font-orbitron font-extrabold text-9xl text-white pointer-events-none select-none">NTC</div>
+                        <div>
+                          <div className="flex items-center gap-2">
+                            <p className="text-[10px] uppercase tracking-widest text-purple-200 font-semibold font-orbitron">Endereço da Matriz Digital</p>
+                            <button onClick={() => setShowWalletAddress(!showWalletAddress)} className="text-[10px] text-purple-400 hover:text-purple-200 transition">
+                              {showWalletAddress ? '🔒 Ocultar' : '🔓 Exibir'}
+                            </button>
+                          </div>
+                          <span className="font-mono text-xs text-gray-300 bg-black/60 px-3 py-1.5 rounded-lg border border-purple-950 block mt-1.5 w-fit select-all tracking-wider">
+                            {showWalletAddress ? currentUser.address : '•'.repeat(currentUser.address.length || 20)}
+                          </span>
+                        </div>
+                        <div>
+                          <p className="text-[10px] uppercase tracking-widest text-purple-200 font-semibold font-orbitron">Saldo em Conta</p>
+                          <div className="flex items-baseline space-x-2">
+                            <span className="text-4xl md:text-5xl font-black font-orbitron text-transparent bg-clip-text bg-gradient-to-r from-purple-100 via-pink-100 to-white">{balance.toFixed(4)}</span>
+                            <span className="text-pink-400 font-orbitron font-bold text-sm">NTC</span>
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* ENVIAR MOEDAS VIA P2P INTERNO (SQLite local simulado em IndexedDB) */}
+                      <form onSubmit={handleExecuteTransfer} className="bg-[#080812] border border-purple-900/40 rounded-2xl p-6 space-y-4">
+                        <h3 className="text-sm font-orbitron font-bold text-purple-300 uppercase tracking-widest">Enviar Moedas Notoriety (P2P Seguro)</h3>
+                        <p className="text-xs text-gray-400 leading-normal">Permite transferir fundos para qualquer carteira registrada localmente neste dispositivo.</p>
+                        
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                          <div>
+                            <label className="block text-[10px] text-gray-400 uppercase mb-1">Assinatura / Chave de Destino (Address)</label>
+                            <input 
+                              type="text" 
+                              value={sendTargetAddress}
+                              onChange={(e) => setSendTargetAddress(e.target.value)}
+                              placeholder="EX: NTC0x..." 
+                              className="w-full bg-black/60 border border-purple-900/40 rounded-xl px-4 py-3 text-xs text-white font-mono focus:outline-none" 
+                            />
+                            {isValidatingAddress && <p className="text-[10px] text-yellow-500 mt-1">Varrendo banco de dados local...</p>}
+                            {targetUserFound && (
+                              <p className="text-[10px] text-emerald-400 mt-1 font-semibold">✔ Agente Local Encontrado: <strong>@{targetUserFound.username}</strong></p>
+                            )}
+                            {sendTargetAddress.length >= 10 && !targetUserFound && !isValidatingAddress && (
+                              <p className="text-[10px] text-red-400 mt-1">✘ Nenhum usuário local com este endereço registrado.</p>
+                            )}
+                          </div>
+                          <div>
+                            <label className="block text-[10px] text-gray-400 uppercase mb-1">Montante NTC</label>
+                            <input 
+                              type="number" 
+                              step="any"
+                              value={sendAmount}
+                              onChange={(e) => setSendAmount(e.target.value)}
+                              placeholder="0.00" 
+                              className="w-full bg-black/60 border border-purple-900/40 rounded-xl px-4 py-3 text-xs text-white font-orbitron focus:outline-none" 
+                            />
+                          </div>
+                        </div>
+                        <button 
+                          type="submit" 
+                          disabled={!targetUserFound}
+                          className={`px-5 py-3 rounded-xl font-orbitron font-bold text-xs transition flex items-center space-x-2 ${targetUserFound ? 'bg-purple-600 hover:bg-purple-500 text-white' : 'bg-gray-900 text-gray-600 cursor-not-allowed'}`}
+                        >
+                          <i data-lucide="send" className="w-3.5 h-3.5"></i>
+                          <span>CONFIRMAR E ENVIAR NTC</span>
+                        </button>
+                      </form>
+                    </div>
+
+                    {/* HISTÓRICO DE TRANSAÇÕES DO BANCO LOCAL */}
+                    <div className="bg-[#080812] border border-purple-900/40 rounded-2xl p-6 flex flex-col justify-between">
+                      <div className="space-y-4">
+                        <h3 className="text-xs font-orbitron font-bold text-purple-300 uppercase tracking-widest">Logs de Transações</h3>
+                        <div className="space-y-2 overflow-y-auto max-h-[290px] pr-1">
+                          {history.length === 0 ? (
+                            <div className="text-center py-10 text-gray-600 italic text-xs">
+                              Sem logs operacionais salvos na IndexedDB.
+                            </div>
+                          ) : (
+                            history.map((tx) => {
+                              const isNegative = tx.amount < 0;
+                              return (
+                                <div key={tx.id} className="bg-black/40 border border-purple-950 p-3 rounded-xl flex justify-between items-center text-xs">
+                                  <div>
+                                    <p className="font-semibold text-gray-200">
+                                      {isNegative ? `Débito para ${tx.toAddress.substring(0, 10)}...` : `Sinal de @${tx.fromUser}`}
+                                    </p>
+                                    <p className="text-[9px] text-gray-500 font-mono">{tx.date}</p>
+                                  </div>
+                                  <span className={`font-mono font-bold ${!isNegative ? 'text-emerald-400' : 'text-red-400'}`}>
+                                    {!isNegative ? `+${tx.amount.toFixed(2)}` : tx.amount.toFixed(2)} NTC
+                                  </span>
+                                </div>
+                              );
+                            })
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                {/* ABA 2: ÁREA DE MINERAÇÃO E FARM */}
+                {activeTab === 'farm' && (
+                  <div className="space-y-6">
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                      
+                      {/* ROLETA MOLECULAR */}
+                      <div className="bg-[#080812] border border-purple-900/40 rounded-2xl p-6 flex flex-col justify-between">
+                        <div>
+                          <span className="text-[9px] uppercase font-bold bg-pink-500/20 text-pink-400 px-2.5 py-1 rounded-full border border-pink-500/20 font-orbitron">Estação de Sintetização</span>
+                          <h3 className="text-xl font-orbitron font-black mt-3">Roleta Molecular</h3>
+                          <p className="text-xs text-gray-400 mt-1">Farm dinâmico via rede de dados. Roda e acumula direto no seu saldo.</p>
+                          
+                          <div className="my-8 flex justify-center items-center relative">
+                            <div 
+                              style={{ 
+                                transform: `rotate(${spinRotation.current}deg)`, 
+                                transition: isSpinning ? 'transform 3.2s cubic-bezier(0.15, 0.85, 0.35, 1)' : 'none' 
+                              }} 
+                              className="w-44 h-44 rounded-full border-4 border-pink-500/70 bg-black flex items-center justify-center relative shadow-2xl"
+                            >
+                              <div className="absolute inset-0 rounded-full border-2 border-dashed border-purple-500/30 animate-spin-slow"></div>
+                              <span className="font-orbitron font-extrabold text-[9px] tracking-widest text-purple-300">NTC MATRIX</span>
+                            </div>
+                            <div className="absolute -top-3 text-pink-500 transform rotate-180">
+                              <i data-lucide="triangle" className="w-6 h-6 fill-current"></i>
+                            </div>
+                          </div>
+
+                          {spinResult && (
+                            <div className="p-3 bg-purple-950/20 border-2 border-purple-500/30 rounded-xl text-center text-xs mb-3 font-semibold text-gray-200">
+                              Sintetizado: <strong className="text-pink-400 font-orbitron">{spinResult.label}</strong>
+                            </div>
+                          )}
+                        </div>
+
+                        {spinCooldown > 0 ? (
+                          <button disabled className="w-full py-3 bg-slate-950 text-gray-600 text-xs font-bold font-orbitron rounded-xl cursor-not-allowed">
+                            VÓRTICE EM RESFRIAMENTO: {spinCooldown}s
+                          </button>
+                        ) : (
+                          <button onClick={spinWheel} disabled={isSpinning} className={`w-full py-3 ${currentNeon.bg} ${currentNeon.hoverBg} text-white font-orbitron text-xs font-black rounded-xl transition uppercase tracking-wider`}>
+                            {isSpinning ? "SINTETIZANDO..." : "GIRAR ROLETA MOLECULAR"}
+                          </button>
+                        )}
+                      </div>
+
+                      {/* INDUTORES DE MINERAÇÃO */}
+                      <div className="bg-[#080812] border border-purple-900/40 rounded-2xl p-6 space-y-4">
+                        <span className="text-[9px] uppercase font-bold bg-emerald-500/20 text-emerald-400 px-2.5 py-1 rounded-full border border-emerald-500/20 font-orbitron">Farms de Fundo</span>
+                        <h3 className="text-xl font-orbitron font-black">Indutores de Rede</h3>
+                        <p className="text-xs text-gray-400 leading-normal">Deixe seu navegador processar dados em segundo plano e receba recompensas de NTC.</p>
+                        
+                        <div className="space-y-4 pt-2">
+                          <div className="bg-black/40 border border-purple-950 p-4 rounded-xl flex justify-between items-center">
+                            <div>
+                              <h4 className="text-xs font-bold text-gray-200">Coletor Solar (Grátis)</h4>
+                              <p className="text-[10px] text-gray-500">Rendimento de 0.50 NTC por minuto</p>
+                              {engines.solar.active && (
+                                <div className="w-32 bg-slate-900 h-1 rounded-full overflow-hidden mt-2">
+                                  <div style={{ width: `${((engines.solar.duration - engines.solar.timeLeft)/engines.solar.duration)*100}%` }} className="bg-emerald-500 h-full"></div>
+                                </div>
+                              )}
+                            </div>
+                            {engines.solar.active ? (
+                              <span className="text-[10px] text-emerald-400 font-mono animate-pulse">Minando... ({engines.solar.timeLeft}s)</span>
+                            ) : (
+                              <button onClick={() => handleStartEngine('solar')} className="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-500 text-white rounded-lg text-xs font-bold transition">Iniciar</button>
+                            )}
+                          </div>
+
+                          <div className="bg-black/40 border border-purple-950 p-4 rounded-xl flex justify-between items-center">
+                            <div>
+                              <h4 className="text-xs font-bold text-gray-200">Motor Quântico (Grátis)</h4>
+                              <p className="text-[10px] text-gray-500">Rendimento de 3.50 NTC em 5 minutos</p>
+                              {engines.quantum.active && (
+                                <div className="w-32 bg-slate-900 h-1 rounded-full overflow-hidden mt-2">
+                                  <div style={{ width: `${((engines.quantum.duration - engines.quantum.timeLeft)/engines.quantum.duration)*100}%` }} className="bg-emerald-500 h-full"></div>
+                                </div>
+                              )}
+                            </div>
+                            {engines.quantum.active ? (
+                              <span className="text-[10px] text-emerald-400 font-mono animate-pulse">Minando... ({engines.quantum.timeLeft}s)</span>
+                            ) : (
+                              <button onClick={() => handleStartEngine('quantum')} className="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-500 text-white rounded-lg text-xs font-bold transition">Iniciar</button>
+                            )}
+                          </div>
+
+                          <div className="bg-black/40 border border-purple-950 p-4 rounded-xl flex justify-between items-center relative overflow-hidden">
+                            {!unlockedFeatures.fusionEngine && (
+                              <div className="absolute inset-0 bg-black/95 backdrop-blur-sm z-10 flex items-center justify-between px-4 text-xs">
+                                <span className="text-gray-400 font-bold font-orbitron">Reator Fusion Bloqueado</span>
+                                <button type="button" onClick={() => handleBuyUpgrade('fusionEngine')} className="px-3 py-1.5 bg-pink-600 hover:bg-pink-500 text-[10px] font-bold rounded-lg text-white font-orbitron">Destravar (12 NTC)</button>
+                              </div>
+                            )}
+                            <div>
+                              <h4 className="text-xs font-bold text-gray-200">Reator de Fusão (Avançado)</h4>
+                              <p className="text-[10px] text-gray-500">Rendimento de 12.00 NTC em 15 minutos</p>
+                              {engines.fusion.active && (
+                                <div className="w-32 bg-slate-900 h-1 rounded-full overflow-hidden mt-2">
+                                  <div style={{ width: `${((engines.fusion.duration - engines.fusion.timeLeft)/engines.fusion.duration)*100}%` }} className="bg-emerald-500 h-full"></div>
+                                </div>
+                              )}
+                            </div>
+                            {engines.fusion.active ? (
+                              <span className="text-[10px] text-emerald-400 font-mono animate-pulse">Minando... ({engines.fusion.timeLeft}s)</span>
+                            ) : (
+                              <button onClick={() => handleStartEngine('fusion')} className="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-500 text-white rounded-lg text-xs font-bold transition">Iniciar</button>
+                            )}
+                          </div>
+                        </div>
+                      </div>
+
+                    </div>
+                  </div>
+                )}
+
+                {/* ABA 3: PERFIL CIBERNÉTICO */}
+                {activeTab === 'cyber-profile' && (
+                  <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 animate-fadeIn">
+                    <div className="lg:col-span-1 space-y-6">
+                      
+                      {/* CARD DO WIDGET NEON */}
+                      <div className="bg-[#080812] border border-purple-900/40 rounded-2xl p-6 relative overflow-hidden">
+                        {!unlockedFeatures.neonThemes && (
+                          <div className="absolute inset-0 bg-black/90 backdrop-blur-sm z-10 flex flex-col items-center justify-center p-4 text-center">
+                            <h4 className="text-xs font-bold text-gray-100 mb-1.5 font-orbitron">Temas de Cores Neon</h4>
+                            <button onClick={() => handleBuyUpgrade('neonThemes')} className="px-3.5 py-1.5 bg-pink-600 hover:bg-pink-500 text-[10px] font-bold rounded-xl text-white">Destravar por 5 NTC</button>
+                          </div>
+                        )}
+                        <h3 className="text-xs font-orbitron font-bold text-purple-300 uppercase tracking-widest mb-3">Tonalidade Neon</h3>
+                        <div className="grid grid-cols-5 gap-2">
+                          {Object.keys(neonClasses).map((key) => (
+                            <button 
+                              key={key} 
+                              onClick={() => setActiveNeon(key)} 
+                              className={`h-8 rounded-lg border-2 ${key === activeNeon ? 'border-white' : 'border-transparent'} transition`} 
+                              style={{ backgroundColor: neonClasses[key].shadow }}
+                            ></button>
+                          ))}
+                        </div>
+                      </div>
+
+                      {/* IDENTIDADE DE PERFIL */}
+                      <form onSubmit={handleUpdateProfile} className="bg-[#080812] border border-purple-900/40 rounded-2xl p-6 space-y-4">
+                        <h3 className="text-xs font-orbitron font-bold text-purple-300 uppercase tracking-widest">Ajustar Holograma</h3>
+                        
+                        <div>
+                          <label className="block text-[10px] text-gray-500 uppercase font-mono mb-1">Status / Bio de Rede</label>
+                          <textarea 
+                            value={profileBio} 
+                            onChange={(e) => setProfileBio(e.target.value)} 
+                            rows="3" 
+                            className="w-full bg-black/60 border border-purple-900/40 rounded-xl px-3 py-2 text-xs focus:outline-none focus:ring-1 focus:ring-pink-500"
+                          ></textarea>
+                        </div>
+
+                        <div className="relative overflow-hidden pt-1">
+                          {!unlockedFeatures.customAvatar && (
+                            <div className="absolute inset-0 bg-black/90 backdrop-blur-xs z-10 flex flex-col items-center justify-center text-center">
+                              <button type="button" onClick={() => handleBuyUpgrade('customAvatar')} className="px-3 py-1 bg-pink-600 hover:bg-pink-500 text-[9px] font-bold rounded-lg font-orbitron">Avatar Holográfico por 3 NTC</button>
+                            </div>
+                          )}
+                          <label className="block text-[10px] text-gray-500 uppercase font-mono mb-1">Avatar (URL de imagem)</label>
+                          <div className="flex gap-1">
+                            <input 
+                              type="text" 
+                              value={profileAvatar} 
+                              onChange={(e) => setProfileAvatar(e.target.value)} 
+                              placeholder="https://link..." 
+                              className="flex-grow bg-black/60 border border-purple-900/40 rounded-xl px-2 py-1 text-xs focus:outline-none" 
+                            />
+                          </div>
+                        </div>
+
+                        <button type="submit" className="w-full py-2 bg-purple-950/40 hover:bg-purple-900/40 text-purple-300 font-orbitron font-bold text-xs rounded-xl border border-purple-800/40 transition">
+                          Gravar Identidade
+                        </button>
+                      </form>
+
+                      {/* CYBER SOUND SYSTEM */}
+                      <div className="bg-[#080812] border border-purple-900/40 rounded-2xl p-6 relative overflow-hidden">
+                        {!unlockedFeatures.youtubePlayer && (
+                          <div className="absolute inset-0 bg-black/90 backdrop-blur-sm z-10 flex flex-col items-center justify-center p-4 text-center">
+                            <h4 className="text-xs font-bold text-gray-100 mb-1.5 font-orbitron font-bold">Soundtrack Player</h4>
+                            <button onClick={() => handleBuyUpgrade('youtubePlayer')} className="px-3.5 py-1.5 bg-pink-600 hover:bg-pink-500 text-[10px] font-bold rounded-xl font-orbitron text-white">Adquirir por 8 NTC</button>
+                          </div>
+                        )}
+                        <h3 className="text-xs font-orbitron font-bold text-purple-300 uppercase mb-3">Soundtrack Cibernética</h3>
+                        <iframe width="100%" height="110" src="https://www.youtube.com/embed/5qap5aO4i9A" className="rounded-xl border border-purple-900/40" frameBorder="0" allowFullScreen></iframe>
+                      </div>
+                    </div>
+
+                    {/* COLUNA DA DIREITA: MURAL DE NOTAS E AGENDA */}
+                    <div className="lg:col-span-2 space-y-6">
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                        
+                        <div className="bg-[#080812] border border-purple-900/40 rounded-2xl p-6 flex flex-col justify-between h-[300px]">
+                          <div>
+                            <h3 className="text-xs font-orbitron font-bold text-purple-300 uppercase tracking-widest mb-3">Notas Rápidas (IndexedDB)</h3>
+                            <div className="space-y-2 overflow-y-auto max-h-[170px] pr-1">
+                              {notesList.length === 0 ? (
+                                <p className="text-[10px] text-gray-600 italic">Nenhum recado criptografado aqui.</p>
+                              ) : (
+                                notesList.map((note) => (
+                                  <div key={note.id} className="bg-black/40 border border-purple-950 p-2.5 rounded-xl flex justify-between items-center text-xs">
+                                    <p className="text-gray-300 break-all max-w-[85%] font-mono text-[11px]">{note.text}</p>
+                                    <button onClick={() => handleDeleteNote(note.id)} className="text-gray-500 hover:text-red-400 font-bold text-sm">&times;</button>
+                                  </div>
+                                ))
+                              )}
+                            </div>
+                          </div>
+                          <form onSubmit={handleAddNote} className="flex gap-1.5 pt-2">
+                            <input 
+                              type="text" 
+                              value={newNoteText} 
+                              onChange={(e) => setNewNoteText(e.target.value)} 
+                              placeholder="Nova nota segura..." 
+                              className="flex-grow bg-black/60 border border-purple-900/40 rounded-xl px-3 py-2 text-xs focus:outline-none focus:ring-1 focus:ring-pink-500 text-white" 
+                            />
+                            <button type="submit" className="px-4 bg-purple-900/40 border border-purple-800/40 rounded-xl font-bold text-sm text-purple-300 hover:bg-purple-800 transition">+</button>
+                          </form>
+                        </div>
+
+                        <div className="bg-[#080812] border border-purple-900/40 rounded-2xl p-6 h-[300px] flex flex-col justify-between">
+                          <div>
+                            <h3 className="text-xs font-orbitron font-bold text-purple-300 uppercase tracking-widest mb-3">Agenda Semanal</h3>
+                            <div className="grid grid-cols-7 gap-1 text-center font-mono text-[10px] mt-4">
+                              <span className="text-gray-500 font-bold">D</span><span className="text-gray-500 font-bold">S</span><span className="text-gray-500 font-bold">T</span><span className="text-gray-500 font-bold">Q</span><span className="text-gray-500 font-bold">Q</span><span className="text-gray-500 font-bold">S</span><span className="text-gray-500 font-bold">S</span>
+                              <div className="p-1.5 bg-purple-950/10 text-gray-600 rounded">21</div>
+                              <div className="p-1.5 bg-purple-950/10 text-gray-600 rounded">22</div>
+                              <div className="p-1.5 bg-purple-950/10 text-gray-600 rounded">23</div>
+                              <div className="p-1.5 bg-purple-950/10 text-gray-600 rounded">24</div>
+                              <div className="p-1.5 bg-purple-950/10 text-gray-600 rounded">25</div>
+                              <div className="p-1.5 bg-pink-900/40 text-pink-300 font-bold rounded animate-pulse">26</div>
+                              <div className="p-1.5 bg-purple-950/10 text-gray-600 rounded">27</div>
+                            </div>
+                          </div>
+                          <p className="text-[10px] text-gray-500 leading-normal text-center bg-black/40 p-3 rounded-lg border border-purple-950">
+                            Finais de semana destacados automaticamente para otimização e foco nos maiores frevos cibernéticos de Pernambuco.
+                          </p>
+                        </div>
+
+                      </div>
+                    </div>
+
+                  </div>
+                )}
+
+                {/* ABA 4: MURAL DE RELATOS DE RESENHA */}
+                {activeTab === 'home-reviews' && (
+                  <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 animate-fadeIn">
+                    <div className="lg:col-span-1 bg-[#080812] border border-purple-900/40 rounded-2xl p-6 h-fit">
+                      <span className="text-[9px] uppercase font-bold bg-purple-500/20 text-purple-300 px-2.5 py-1 rounded-full border border-purple-500/20 font-orbitron">Consensual Logs</span>
+                      <h3 className="text-lg font-orbitron font-black mt-3 mb-2 text-transparent bg-clip-text bg-gradient-to-r from-purple-300 to-pink-300">Registrar Relato</h3>
+                      <p className="text-xs text-gray-400 mb-4 leading-normal">Relate encontros e interações lofi em sua residência para minerar reputação direta na base de dados.</p>
+
+                      <form onSubmit={handlePublishReview} className="space-y-3.5">
+                        <div>
+                          <label className="block text-[10px] text-gray-500 uppercase tracking-widest mb-1">Tema / Título do Encontro</label>
+                          <input 
+                            type="text" 
+                            value={newReview.title} 
+                            onChange={(e) => setNewReview({...newReview, title: e.target.value})} 
+                            placeholder="Ex: Noite de Lofi e Código" 
+                            className="w-full bg-black/60 border border-purple-900/40 rounded-xl px-3 py-2 text-xs focus:outline-none focus:ring-1 focus:ring-pink-500 text-white" 
+                          />
+                        </div>
+                        <div>
+                          <label className="block text-[10px] text-gray-500 uppercase tracking-widest mb-1">Host (Anfitrião)</label>
+                          <input 
+                            type="text" 
+                            value={newReview.host} 
+                            onChange={(e) => setNewReview({...newReview, host: e.target.value})} 
+                            placeholder="Ex: @cyber_nomad" 
+                            className="w-full bg-black/60 border border-purple-900/40 rounded-xl px-3 py-2 text-xs focus:outline-none focus:ring-1 focus:ring-pink-500 text-white" 
+                          />
+                        </div>
+                        <div>
+                          <label className="block text-[10px] text-gray-500 uppercase tracking-widest mb-1">Vibe (1 a 5 Estrelas)</label>
+                          <select 
+                            value={newReview.vibe} 
+                            onChange={(e) => setNewReview({...newReview, vibe: e.target.value})} 
+                            className="w-full bg-[#080812] border border-purple-900/40 rounded-xl px-3 py-2 text-xs focus:outline-none text-pink-400 font-bold"
+                          >
+                            <option value="5">🔥 5 - Vibe Absoluta</option>
+                            <option value="4">✨ 4 - Encontro Incrível</option>
+                            <option value="3">🎵 3 - Som Lofi de Qualidade</option>
+                            <option value="2">💤 2 - Conversa Suave</option>
+                            <option value="1">💤 1 - Instável</option>
+                          </select>
+                        </div>
+                        <div>
+                          <label className="block text-[10px] text-gray-500 uppercase tracking-widest mb-1">Escreva os detalhes</label>
+                          <textarea 
+                            rows="3" 
+                            value={newReview.reviewText} 
+                            onChange={(e) => setNewReview({...newReview, reviewText: e.target.value})} 
+                            placeholder="O que rolou, sons que tocaram, snacks..." 
+                            className="w-full bg-black/60 border border-purple-900/40 rounded-xl px-3 py-2 text-xs focus:outline-none focus:ring-1 focus:ring-pink-500 text-white"
+                          ></textarea>
+                        </div>
+
+                        <div className="flex items-start space-x-2 bg-purple-950/20 p-2.5 rounded-xl border border-purple-900/30">
+                          <input 
+                            type="checkbox" 
+                            checked={newReview.consented} 
+                            onChange={(e) => setNewReview({...newReview, consented: e.target.checked})} 
+                            className="rounded focus:ring-0 mt-0.5 bg-black" 
+                          />
+                          <p className="text-[9px] text-purple-300 leading-tight">Certifico sob criptografia que todos os membros presentes validaram o consentimento para divulgação do log.</p>
+                        </div>
+
+                        <button type="submit" className="w-full py-2.5 bg-gradient-to-r from-purple-600 to-pink-500 hover:from-purple-500 hover:to-pink-400 text-white font-orbitron font-black text-xs rounded-xl transition shadow-lg flex items-center justify-center space-x-2 uppercase">
+                          <span>Publicar Relato</span>
+                          <span className="text-[9px] bg-black/40 px-2 py-0.5 rounded-lg text-emerald-400 font-mono">+1.5 NTC</span>
+                        </button>
+                      </form>
+                    </div>
+
+                    <div className="lg:col-span-2 bg-[#080812] border border-purple-900/40 rounded-2xl p-6">
+                      <div className="flex justify-between items-center mb-4">
+                        <h3 className="text-xs font-orbitron font-bold text-purple-300 uppercase tracking-widest">Feed de Logs Cibernéticos</h3>
+                        <span className="text-[9px] text-emerald-400 font-bold bg-emerald-950/30 px-2 py-0.5 rounded border border-emerald-500/20 flex items-center space-x-1">
+                          <span className="h-1.5 w-1.5 rounded-full bg-emerald-500 animate-ping"></span>
+                          <span>IndexedDB Sincronizado</span>
+                        </span>
+                      </div>
+
+                      <div className="space-y-4 overflow-y-auto max-h-[460px] pr-1">
+                        {reviewsList.length === 0 ? (
+                          <div className="text-center py-10 text-gray-500 italic text-xs">
+                            Nenhum log operacional de resenha doméstica arquivado na IndexedDB deste navegador.
+                          </div>
+                        ) : (
+                          reviewsList.map((review) => (
+                            <div key={review.id} className="bg-black/30 border border-purple-950/60 p-4 rounded-xl space-y-2 relative">
+                              <div className="flex justify-between items-start">
+                                <div>
+                                  <h4 className="font-bold text-sm text-gray-200">{review.title}</h4>
+                                  <p className="text-[10px] text-gray-500">Host de Encontro: <span className="text-purple-400 font-semibold">{review.host}</span></p>
+                                </div>
+                                <span className="bg-purple-900/20 text-purple-300 border border-purple-500/20 text-[9px] px-2 py-0.5 rounded-full">
+                                  {"★".repeat(review.vibe)}{"☆".repeat(5 - review.vibe)}
+                                </span>
+                              </div>
+                              <p className="text-gray-300 text-xs italic leading-relaxed">"{review.reviewText}"</p>
+                              <div className="flex justify-between items-center text-[9px] text-gray-600 pt-2 border-t border-purple-950/60 font-mono">
+                                <span>Assinado por: @{review.author}</span>
+                                <span>{review.timestamp}</span>
+                              </div>
+                            </div>
+                          ))
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                {/* ABA 5: WIDGET EMBED */}
+                {activeTab === 'embed' && (
+                  <div className="space-y-6 animate-fadeIn">
+                    <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                      
+                      {/* GERADOR DE EMBED */}
+                      <div className="bg-[#080812] border border-purple-900/40 rounded-2xl p-6 space-y-4">
+                        <h3 className="text-lg font-orbitron font-black text-purple-300 uppercase tracking-wider">Widget Embed Creator</h3>
+                        <p className="text-xs text-gray-400">Gere links e iframes para integrar transações de Notoriety Coin em portfólios, blogs ou jogos externos.</p>
+                        
+                        <div>
+                          <label className="block text-[10px] text-gray-400 uppercase tracking-widest mb-2">Comportamento do Widget</label>
+                          <div className="grid grid-cols-2 gap-2">
+                            <button onClick={() => setEmbedType('send')} className={`py-2.5 px-3 rounded-xl text-xs font-bold font-orbitron transition ${embedType === 'send' ? 'bg-pink-600 text-white' : 'bg-black text-gray-400 border border-purple-950'}`}>💳 Cobrar NTC</button>
+                            <button onClick={() => setEmbedType('receive')} className={`py-2.5 px-3 rounded-xl text-xs font-bold font-orbitron transition ${embedType === 'receive' ? 'bg-pink-600 text-white' : 'bg-black text-gray-400 border border-purple-950'}`}>💰 Receber NTC</button>
+                          </div>
+                        </div>
+
+                        <div>
+                          <label className="block text-[10px] text-gray-400 uppercase tracking-widest mb-2">Assinatura de Carteira</label>
+                          <div className="flex gap-1.5">
+                            <input 
+                              type="text" 
+                              value={embedWallet} 
+                              onChange={(e) => setEmbedWallet(e.target.value)} 
+                              placeholder={currentUser.address} 
+                              className="flex-grow bg-black/60 border border-purple-900/40 rounded-xl px-3 py-2.5 text-xs font-mono focus:outline-none" 
+                            />
+                            <button onClick={() => setEmbedWallet(currentUser.address)} className="px-3 py-2.5 bg-purple-900/40 hover:bg-purple-800 border border-purple-800/40 rounded-xl text-xs font-bold">Auto</button>
+                          </div>
+                        </div>
+
+                        {embedType === 'send' && (
+                          <div>
+                            <label className="block text-[10px] text-gray-400 uppercase tracking-widest mb-2">Preço Fixo em NTC</label>
+                            <input 
+                              type="number" 
+                              step="0.01" 
+                              value={embedAmount} 
+                              onChange={(e) => setEmbedAmount(e.target.value)} 
+                              className="w-full bg-black/60 border border-purple-900/40 rounded-xl px-3 py-2.5 text-xs font-mono focus:outline-none text-white" 
+                            />
+                          </div>
+                        )}
+
+                        <div className="bg-black/80 border border-purple-950 p-4 rounded-xl">
+                          <p className="text-[10px] text-gray-400 mb-2 uppercase font-semibold">Iframe HTML de integração:</p>
+                          <div className="bg-black/60 p-3 rounded-lg border border-purple-950/60 overflow-x-auto font-mono text-[9px] text-pink-400 select-all leading-normal">
+                            {embedType === 'send' ? 
+                              `<iframe src="${window.location.origin}${window.location.pathname}?embed=send&wallet=${embedWallet || currentUser.address}&amount=${embedAmount}" width="400" height="200" style="border:none;border-radius:12px;"></iframe>`
+                              : `<iframe src="${window.location.origin}${window.location.pathname}?embed=receive&wallet=${embedWallet || currentUser.address}" width="300" height="150" style="border:none;border-radius:12px;"></iframe>`
+                            }
+                          </div>
+                          <button 
+                            onClick={() => {
+                              const codeStr = embedType === 'send' ? 
+                                `<iframe src="${window.location.origin}${window.location.pathname}?embed=send&wallet=${embedWallet || currentUser.address}&amount=${embedAmount}" width="400" height="200" style="border:none;border-radius:12px;"></iframe>`
+                                : `<iframe src="${window.location.origin}${window.location.pathname}?embed=receive&wallet=${embedWallet || currentUser.address}" width="300" height="150" style="border:none;border-radius:12px;"></iframe>`;
+                              navigator.clipboard.writeText(codeStr);
+                              showToast("Código copiado com sucesso!");
+                            }} 
+                            className="w-full mt-3 py-2.5 bg-pink-600 hover:bg-pink-500 text-white text-xs font-bold rounded-xl transition uppercase tracking-wider font-orbitron"
+                          >
+                            Copiar Código Master
+                          </button>
+                        </div>
+                      </div>
+
+                      {/* PRÉVIA DO WIDGET */}
+                      <div className="bg-[#080812] border border-purple-900/40 rounded-2xl p-6 flex flex-col justify-between">
+                        <div>
+                          <h3 className="text-xs font-orbitron font-black text-purple-300 mb-4 uppercase tracking-wider">Holograma de Preview</h3>
+                          <div className="bg-black/60 rounded-2xl border border-purple-950 p-6 aspect-video flex items-center justify-center relative">
+                            <div className="glow-overlay"></div>
+                            {embedType === 'send' ? (
+                              <div className="text-center relative z-10 w-full max-w-sm">
+                                <span className="text-[9px] font-mono text-gray-500 block uppercase mb-2">Painel de Compra</span>
+                                <div className="bg-gradient-to-r from-purple-950/80 to-pink-950/80 border border-purple-500/30 rounded-xl p-4 shadow-xl">
+                                  <p className="text-[10px] text-gray-300 mb-1">Destinatário da Cobrança:</p>
+                                  <p className="text-[11px] font-mono text-pink-400 mb-3 truncate">{embedWallet || currentUser.address}</p>
+                                  <p className="text-[10px] text-gray-300 mb-1">Custo da Operação:</p>
+                                  <p className="text-lg font-black text-emerald-400 font-orbitron">{embedAmount} NTC</p>
+                                </div>
+                              </div>
+                            ) : (
+                              <div className="text-center relative z-10 w-full max-w-sm">
+                                <span className="text-[9px] font-mono text-gray-500 block uppercase mb-2">Painel de Doação</span>
+                                <div className="bg-gradient-to-r from-emerald-950/80 to-cyan-950/80 border border-emerald-500/30 rounded-xl p-4 shadow-xl">
+                                  <p className="text-[10px] text-gray-300 mb-1">Doar para o Agente:</p>
+                                  <p className="text-[11px] font-mono text-emerald-400 truncate">{embedWallet || currentUser.address}</p>
+                                </div>
+                              </div>
+                            )}
+                          </div>
+                        </div>
+                        <p className="text-[10px] text-gray-500 mt-4 text-center italic">Os blocos responsivos se alinham de maneira flexível a telas de mobile e desktop.</p>
+                      </div>
+
+                    </div>
+                  </div>
+                )}
+
+                {/* ABA 6: CONFIGURAÇÃO DE SINCRONIZAÇÃO AUTOMÁTICA GITHUB */}
+                {activeTab === 'backup-sync' && (
+                  <div className="bg-[#080812] border border-purple-900/40 rounded-2xl p-6 space-y-6 animate-fadeIn">
+                    <h3 className="text-lg font-orbitron font-black text-purple-300 uppercase tracking-wider">⚡ Sincronização Segura via Netlify</h3>
+                    <p className="text-xs text-gray-400 leading-normal">
+                      Esta aplicação agora usa <strong>Netlify Serverless Functions</strong> para sincronizar dados com o GitHub de forma segura. O token PAT é armazenado em variáveis de ambiente (nunca no navegador).
+                    </p>
+
+                    <div className="p-4 bg-green-950/30 border border-green-900/50 rounded-xl text-xs text-green-300 space-y-2">
+                      <p className="font-bold">✅ Sistema Seguro Ativado</p>
+                      <p>
+                        Suas credenciais do GitHub estão <strong>100% protegidas</strong>. A sincronização automática funciona transparentemente quando você faz transações.
+                      </p>
+                    </div>
+
+                    <div className="grid grid-cols-1 gap-3 pt-4">
+                      <button 
+                        type="button" 
+                        onClick={pullFromGitHub}
+                        disabled={githubSyncStatus === 'loading' || !currentUser || !AUTHORIZED_ADMINS.includes(currentUser?.username || '')}
+                        className="py-2.5 bg-black border border-purple-900 text-purple-300 font-bold font-orbitron text-xs rounded-xl transition disabled:opacity-50 disabled:cursor-not-allowed"
+                      >
+                        {!currentUser ? '🔒 FAÇA LOGIN PRIMEIRO' : !AUTHORIZED_ADMINS.includes(currentUser.username) ? '⛔ ACESSO RESTRITO A ADMINS' : githubSyncStatus === 'loading' ? 'SINCRONIZANDO...' : 'SINCRONIZAR AGORA (PULL)'}
+                      </button>
+                      {currentUser && !AUTHORIZED_ADMINS.includes(currentUser.username) && (
+                        <p className="text-xs text-orange-400 italic border-l-2 border-orange-400 pl-2">
+                          ℹ️ Apenas administradores podem sincronizar dados globais do GitHub. Contate um admin se precisar.
+                        </p>
+                      )}
+                    </div>
+
+                    <div className="p-4 bg-purple-950/20 border border-purple-900/30 rounded-xl text-xs text-gray-400 space-y-2">
+                      <p className="font-bold text-gray-200">Como configurar o Netlify?</p>
+                      <p>
+                        <strong>Passo 1:</strong> Faça deploy desta pasta no Netlify (clique em "New Site from Git")<br/>
+                        <strong>Passo 2:</strong> Vá em Site Settings → Build & Deploy → Environment<br/>
+                        <strong>Passo 3:</strong> Adicione as variáveis de ambiente:
+                      </p>
+                      <ul className="list-disc list-inside space-y-1 text-gray-500 ml-2">
+                        <li><code className="text-cyan-400">GITHUB_TOKEN</code> = seu Personal Access Token</li>
+                        <li><code className="text-cyan-400">GITHUB_OWNER</code> = seu username (ex: aceleradox)</li>
+                        <li><code className="text-cyan-400">GITHUB_REPO</code> = nome do repo (ex: NTC-wallet)</li>
+                        <li><code className="text-cyan-400">GITHUB_PATH</code> = database.json</li>
+                      </ul>
+                      <p className="mt-2">Pronto! A sincronização automática começará a funcionar.</p>
+                    </div>
+                  </div>
+                )}
+
+              </div>
+            )}
+          </main>
+
+          {/* Rodapé do ecossistema */}
+          <footer className="border-t border-purple-950 bg-black/80 px-6 py-4 text-center mt-12 text-[10px] text-gray-500 font-orbitron tracking-wider">
+            <p>Notoriety Coin Wallet &copy; 2026. Sincronizado por banco de dados transacional IndexedDB local para máxima privacidade no GitHub Pages.</p>
+          </footer>
+        </div>
+      );
+    }
+
+    ReactDOM.render(<App />, document.getElementById('root'));
+  </script>
+</body>
+</html>

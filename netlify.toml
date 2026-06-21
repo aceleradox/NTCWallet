@@ -1,0 +1,35 @@
+# Netlify Configuration File
+# ===========================
+
+[build]
+  publish = "."
+  functions = "netlify/functions"
+  command = "echo 'No build required - static site'"
+
+# Variáveis de ambiente
+# Configure estas no dashboard do Netlify: Site > Settings > Build & Deploy > Environment
+[build.environment]
+  GITHUB_TOKEN = ""        # Coloque seu PAT aqui ou na UI do Netlify
+  GITHUB_OWNER = "aceleradox"
+  GITHUB_REPO = "NTC-wallet"
+  GITHUB_PATH = "database.json"
+
+# Redirecionamentos para SPA
+[[redirects]]
+  from = "/*"
+  to = "/index (4).html"
+  status = 200
+
+# Headers de segurança e CORS
+[[headers]]
+  for = "/.netlify/functions/*"
+  [headers.values]
+    "Access-Control-Allow-Origin" = "*"
+    "Access-Control-Allow-Methods" = "GET, POST, OPTIONS"
+    "Access-Control-Allow-Headers" = "Content-Type"
+
+# Cache simples
+[[headers]]
+  for = "/*"
+  [headers.values]
+    "Cache-Control" = "public, max-age=3600"

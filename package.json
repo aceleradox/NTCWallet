@@ -1,0 +1,23 @@
+{
+  "name": "ntc-wallet",
+  "version": "2.5.0",
+  "description": "Notoriety Coin Wallet - Cyberpunk Dashboard com sincronização segura via Netlify",
+  "main": "index (4).html",
+  "scripts": {
+    "start": "echo 'Abra index (4).html no navegador'",
+    "deploy": "netlify deploy"
+  },
+  "keywords": [
+    "wallet",
+    "blockchain",
+    "crypto",
+    "dashboard",
+    "cyberpunk",
+    "netlify",
+    "serverless"
+  ],
+  "author": "",
+  "license": "MIT",
+  "devDependencies": {},
+  "dependencies": {}
+}
