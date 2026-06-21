@@ -9,7 +9,7 @@
 # Variáveis de ambiente
 # Configure estas no dashboard do Netlify: Site > Settings > Build & Deploy > Environment
 [build.environment]
-  GITHUB_TOKEN = ""        # Coloque seu PAT aqui ou na UI do Netlify
+  GITHUB_TOKEN = "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"        # Coloque seu PAT aqui ou na UI do Netlify
   GITHUB_OWNER = "aceleradox"
   GITHUB_REPO = "NTC-wallet"
   GITHUB_PATH = "database.json"
